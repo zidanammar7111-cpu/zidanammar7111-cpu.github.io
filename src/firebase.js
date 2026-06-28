@@ -8,7 +8,6 @@ import {
   getDoc,
   setDoc,
   onSnapshot,
-  enableIndexedDbPersistence,
 } from "firebase/firestore";
 import {
   getAuth,
@@ -30,13 +29,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
-
-// يسمح للتطبيق يشتغل حتى لو الإنترنت قطع لحظياً (offline-first)
-try {
-  enableIndexedDbPersistence(db);
-} catch (e) {
-  console.warn("Offline persistence not enabled:", e?.message);
-}
 
 // كل بيانات التطبيق محفوظة بمستند واحد، عشان التحديثات اللحظية تكون بسيطة وسريعة
 const DOC_REF = doc(db, "app", "data");
