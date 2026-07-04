@@ -292,15 +292,24 @@ function AuthScreen({ hasAnyProfile, onAuthSuccess }) {
   );
 }
 
-/* ============================================================
-   التطبيق الرئيسي
-   ============================================================ */
-export default function DeliveryApp() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [authUser, setAuthUser] = useState(null); // مستخدم Firebase Auth الحقيقي (null = لسا ما تأكدنا، false = مش مسجل دخول)
-  const [authChecked, setAuthChecked] = useState(false);
-  const [screen, setScreen] = useState("home"); // home, company, reports, settings, entryForm, convert
+/* =========================================================== // مراقبة حالة تسجيل الدخول الحقيقية من Firebase Auth
+  useEffect(() => {
+    // timeout: إذا Firebase ما ردّ بـ 5 ثواني، نفتح شاشة الدخول مباشرة
+    const timer = setTimeout(() => {
+      setAuthUser(false);
+      setAuthChecked(true);
+    }, 5000);
+
+    const unsub = subscribeToAuth((user) => {
+      clearTimeout(timer);
+      setAuthUser(user || false);
+      setAuthChecked(true);
+    });
+    return () => {
+      clearTimeout(timer);
+      unsub();
+    };
+  }, []); const [screen, setScreen] = useState("home"); // home, company, reports, settings, entryForm, convert
   const [selectedCompanyId, setSelectedCompanyId] = useState(null);
   const [entryFormType, setEntryFormType] = useState(null); // order, debt, repay, expense
   const [editingEntryId, setEditingEntryId] = useState(null);
