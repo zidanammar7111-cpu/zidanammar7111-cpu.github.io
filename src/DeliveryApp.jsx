@@ -322,14 +322,7 @@ function AuthScreen({ hasAnyProfile, onAuthSuccess }) {
   const skipNextSnapshot = useRef(false);
   const pendingDisplayName = useRef(null); // اسم العرض يلي لسا ما انحفظ بـ Firestore (وقت التسجيل)
 
-  // مراقبة حالة تسجيل الدخول الحقيقية من Firebase Auth
-  useEffect(() => {
-    const unsub = subscribeToAuth((user) => {
-      setAuthUser(user || false);
-      setAuthChecked(true);
-    });
-    return () => unsub();
-  }, []);
+  // مراقبة حالة تسجيل الدخول]);
 
   // تحميل البيانات أول مرة من Firestore + الاشتراك بالتحديثات اللحظية (فقط بعد تسجيل الدخول)
   useEffect(() => {
