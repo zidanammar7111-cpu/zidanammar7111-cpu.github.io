@@ -539,4 +539,152 @@ function CloseAccountScreen({ company, data, persist, onBack, showToast, onDone 
       <TopBar title="تسكير حساب" onBack={onBack} />
       <div style={{ padding: "0 16px" }}>
         <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 18, marginBottom: 18 }}>
-          <div style={{ fontWeight: 800, fontSize: 16, marginBo
+          <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 14 }}>ملخص حساب {company.name}</div>
+          <Row label="الأرباح" value={`$${fmt(s.profit)}`} valueColor={COLORS.green} />
+          <div style={{ height: 8 }} />
+          <Row label="المصروف" value={`$${fmt(s.expense)}`} valueColor={COLORS.red} />
+          <div style={{ height: 8 }} />
+          <Row label="الدين الحالي" value={`$${fmt(s.debt)}`} valueColor={COLORS.orange} />
+          <div style={{ height: 8 }} />
+          <Row label="التيبس" value={`$${fmt(s.tips)}`} valueColor={COLORS.purple} />
+        </div>
+        <div style={{ fontSize: 13, color: COLORS.textDim, marginBottom: 16, lineHeight: 1.6 }}>تسكير الحساب يحفظ نسخة من الملخص الحالي بتاريخ اليوم. هذا لا يحذف العمليات.</div>
+        <SaveButton label="تأكيد تسكير الحساب" color={COLORS.bgCard2} onClick={doClose} />
+      </div>
+    </div>
+  );
+}
+
+function ConvertScreen({ data, persist, onBack, showToast }) {
+  const [amount, setAmount] = useState("");
+  const [direction, setDirection] = useState("usd_to_lbp");
+  const rate = data.exchangeRate || 1;
+  const amt = parseFloat(amount) || 0;
+  const amtForCalc = direction === "lbp_to_usd" ? amt * 1000 : amt;
+  const result = direction === "usd_to_lbp" ? amtForCalc * rate : amtForCalc / rate;
+  const valid = amtForCalc > 0;
+  const confirm = () => {
+    const entry = direction === "usd_to_lbp" ? { id: uid(), type: "convert", companyId: null, fromUSD: amtForCalc, toLBP: result, fromLBP: 0, toUSD: 0, createdAt: Date.now() } : { id: uid(), type: "convert", companyId: null, fromLBP: amtForCalc, toUSD: result, fromUSD: 0, toLBP: 0, createdAt: Date.now() };
+    persist((prev) => ({ ...prev, entries: [...prev.entries, entry] }));
+    showToast("تم تأكيد التحويل"); setAmount("");
+  };
+  return (
+    <div>
+      <TopBar title="تحويل العملة" onBack={onBack} />
+      <div style={{ padding: "0 16px" }}>
+        <div style={{ textAlign: "center", color: COLORS.textDim, fontSize: 13, marginBottom: 18 }}>سعر الصرف الحالي: 1$ = {fmtLBP(rate)} ل.ل</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 18, background: COLORS.bgCard2, borderRadius: 12, padding: 4 }}>
+          <button onClick={() => setDirection("usd_to_lbp")} style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", fontWeight: 700, cursor: "pointer", background: direction==="usd_to_lbp"?COLORS.green:"transparent", color: direction==="usd_to_lbp"?"#fff":COLORS.textDim }}>دولار ← ليرة</button>
+          <button onClick={() => setDirection("lbp_to_usd")} style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", fontWeight: 700, cursor: "pointer", background: direction==="lbp_to_usd"?COLORS.blue:"transparent", color: direction==="lbp_to_usd"?"#fff":COLORS.textDim }}>ليرة ← دولار</button>
+        </div>
+        <Field label={direction==="usd_to_lbp"?"المبلغ بالدولار":"المبلغ بالليرة (بالألف)"}>
+          <input style={inputStyle} type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" autoFocus />
+        </Field>
+        <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 20, textAlign: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 13, color: COLORS.textDim, marginBottom: 8 }}>النتيجة</div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: direction==="usd_to_lbp"?COLORS.blue:COLORS.green }}>{direction==="usd_to_lbp"?`${fmtLBP(result)} ل.ل`:`$${fmt(result)}`}</div>
+        </div>
+        <SaveButton label="تأكيد التحويل" onClick={confirm} disabled={!valid} />
+      </div>
+    </div>
+  );
+}
+
+function ReportsScreen({ data }) {
+  const [period, setPeriod] = useState("day");
+  const [refDate, setRefDate] = useState(new Date());
+  const range = useMemo(() => {
+    const d = new Date(refDate);
+    let start, end;
+    if (period==="day") { start=new Date(d.setHours(0,0,0,0)); end=new Date(d.setHours(23,59,59,999)); }
+    else if (period==="week") { const day=d.getDay(); start=new Date(d); start.setDate(d.getDate()-day); start.setHours(0,0,0,0); end=new Date(start); end.setDate(start.getDate()+6); end.setHours(23,59,59,999); }
+    else if (period==="month") { start=new Date(d.getFullYear(),d.getMonth(),1); end=new Date(d.getFullYear(),d.getMonth()+1,0,23,59,59,999); }
+    else { start=new Date(d.getFullYear(),0,1); end=new Date(d.getFullYear(),11,31,23,59,59,999); }
+    return { start, end };
+  }, [period, refDate]);
+  const filtered = data.entries.filter((e) => e.createdAt >= range.start.getTime() && e.createdAt <= range.end.getTime());
+  let profit=0, expense=0, debt=0, tips=0, dueToCompany=0;
+  filtered.forEach((e) => { if(e.type==="order"){profit+=e.profitTotalUSD||0;tips+=e.tipsTotalUSD||0;dueToCompany+=e.dueToCompanyUSD||0;} else if(e.type==="debt")debt+=e.amountUSD; else if(e.type==="repay")debt-=e.amountUSD; else if(e.type==="expense")expense+=e.amountUSD; });
+  const net = profit - expense;
+  const shift = (dir) => { const d=new Date(refDate); if(period==="day")d.setDate(d.getDate()+dir); else if(period==="week")d.setDate(d.getDate()+dir*7); else if(period==="month")d.setMonth(d.getMonth()+dir); else d.setFullYear(d.getFullYear()+dir); setRefDate(d); };
+  const label = useMemo(() => {
+    if(period==="day") return range.start.toLocaleDateString("ar-LB",{year:"numeric",month:"2-digit",day:"2-digit"});
+    if(period==="week") return `${range.start.toLocaleDateString("ar-LB",{month:"2-digit",day:"2-digit"})} - ${range.end.toLocaleDateString("ar-LB",{month:"2-digit",day:"2-digit"})}`;
+    if(period==="month") return range.start.toLocaleDateString("ar-LB",{year:"numeric",month:"long"});
+    return range.start.getFullYear().toString();
+  }, [period, range]);
+  return (
+    <div style={{ padding: "16px 16px 0" }}>
+      <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 16 }}>التقارير</div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, background: COLORS.bgCard2, borderRadius: 12, padding: 4 }}>
+        {[{k:"day",l:"يومي"},{k:"week",l:"أسبوعي"},{k:"month",l:"شهري"},{k:"year",l:"سنوي"}].map((p) => <button key={p.k} onClick={() => setPeriod(p.k)} style={{ flex:1, padding:"9px 4px", borderRadius:9, border:"none", fontWeight:700, fontSize:13, cursor:"pointer", background:period===p.k?COLORS.yellow:"transparent", color:period===p.k?"#111":COLORS.textDim }}>{p.l}</button>)}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, background: COLORS.bgCard, borderRadius: 12, padding: "10px 14px", border: `1px solid ${COLORS.border}` }}>
+        <button onClick={() => shift(-1)} style={{ background:"none", border:"none", color:COLORS.text, cursor:"pointer" }}><ChevronRightIcon size={20} /></button>
+        <div style={{ fontWeight: 700, fontSize: 14 }}>{label}</div>
+        <button onClick={() => shift(1)} style={{ background:"none", border:"none", color:COLORS.text, cursor:"pointer" }}><ChevronLeft size={20} /></button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+        <StatBox label="إجمالي الأرباح" value={profit} color={COLORS.green} />
+        <StatBox label="إجمالي المصروف" value={expense} color={COLORS.red} />
+        <StatBox label="إجمالي الديون" value={debt} color={COLORS.orange} />
+        <StatBox label="إجمالي التيبس" value={tips} color={COLORS.purple} />
+        <StatBox label="مرتب للشركة" value={dueToCompany} color={COLORS.yellow} />
+      </div>
+      <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 18, textAlign: "center" }}>
+        <div style={{ fontSize: 13, color: COLORS.textDim, marginBottom: 6 }}>الربح الصافي (أرباح - مصروف)</div>
+        <div style={{ fontSize: 26, fontWeight: 800, color: net>=0?COLORS.green:COLORS.red }}>${fmt(net)}</div>
+      </div>
+      {filtered.length === 0 && <div style={{ textAlign: "center", color: COLORS.textFaint, padding: "30px 0", fontSize: 14 }}>لا توجد عمليات في هذه الفترة</div>}
+    </div>
+  );
+}
+
+function SettingsScreen({ data, persist, onBack, showToast }) {
+  const [editingRate, setEditingRate] = useState(false);
+  const [rateInput, setRateInput] = useState(data.exchangeRate.toString());
+  const saveRate = () => { const r=parseFloat(rateInput); if(r>0){persist((prev)=>({...prev,exchangeRate:r}));} setEditingRate(false); };
+  const recalcAll = () => {
+    persist((prev) => ({ ...prev, entries: prev.entries.map((e) => {
+      if(e.type!=="order") return e;
+      const rate=prev.exchangeRate||1;
+      const orderValueTotalUSD=(e.orderValueUSD||0)+(e.orderValueLBP||0)/rate;
+      const profitTotalUSD=(e.profitUSD||0)+(e.profitLBP||0)/rate;
+      const dueToCompanyUSD=orderValueTotalUSD-profitTotalUSD;
+      const paidTotalUSD=(e.paidUSD||0)+(e.paidLBP||0)/rate;
+      const tipsTotalUSD=paidTotalUSD-profitTotalUSD-dueToCompanyUSD;
+      return {...e,orderValueTotalUSD,profitTotalUSD,dueToCompanyUSD,paidTotalUSD,tipsUSD:tipsTotalUSD,tipsLBP:tipsTotalUSD*rate,tipsTotalUSD};
+    })}));
+    showToast("تم تحديث كل العمليات");
+  };
+  return (
+    <div style={{ padding: "16px 16px 0" }}>
+      <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 18 }}>الإعدادات</div>
+      <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 14 }}>
+        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>سعر صرف الدولار</div>
+        {editingRate ? (
+          <div style={{ display: "flex", gap: 8 }}>
+            <input style={{ ...inputStyle, flex: 1 }} type="number" value={rateInput} onChange={(e) => setRateInput(e.target.value)} autoFocus />
+            <button onClick={saveRate} style={{ background: COLORS.green, border: "none", borderRadius: 10, padding: "0 16px", color: "#fff", cursor: "pointer" }}><Check size={18} /></button>
+          </div>
+        ) : (
+          <button onClick={() => { setRateInput(data.exchangeRate.toString()); setEditingRate(true); }} style={{ display: "flex", justifyContent: "space-between", width: "100%", background: COLORS.bgCard2, border: "none", borderRadius: 10, padding: "12px 14px", color: COLORS.text, cursor: "pointer", fontSize: 15 }}>
+            <span>1$ = {fmtLBP(data.exchangeRate)} ل.ل</span>
+            <Edit3 size={16} color={COLORS.textDim} />
+          </button>
+        )}
+      </div>
+      <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 14 }}>
+        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>إعادة حساب كل العمليات</div>
+        <div style={{ fontSize: 12, color: COLORS.textFaint, marginBottom: 12, lineHeight: 1.6 }}>يحدّث التيبس والمرتب لكل العمليات القديمة بسعر الصرف الحالي.</div>
+        <button onClick={recalcAll} style={{ width: "100%", background: COLORS.bgCard2, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "12px", color: COLORS.text, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontWeight: 700, cursor: "pointer" }}><RefreshCw size={16} /> إعادة حساب الآن</button>
+      </div>
+      <div style={{ background: "#1a2230", border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, fontSize: 13, color: COLORS.textDim, lineHeight: 1.7 }}>
+        <div style={{ fontWeight: 800, color: COLORS.text, marginBottom: 8 }}>ملاحظات مهمة</div>
+        • البيانات تُحفظ محلياً على هذا الجهاز تلقائياً<br />
+        • يمكنك تغيير سعر الصرف في أي وقت من هنا<br />
+        • تسكير الحساب لا يحذف البيانات، فقط يحفظ نسخة من الملخص
+      </div>
+    </div>
+  );
+}
