@@ -3,6 +3,6 @@
   "target": {
     "namespace": "android_app",
     "package_name": "io.github.zidanammar7111_cpu.twa",
-    "sha256_cert_fingerprints": ["A1:78:73:43:2B:1B:3C:B8:B6:81:B2:D8:FF:B6:16:E8:13:DE:5D:B0:E9:64:80:32:4E:96:0B:6C:30:EF:FD:7C"]
+    "sha256_cert_fingerprints": ["B0:B0:D3:51:F8:AC:50:C2:5E:53:B1:A5:6E:4F:C9:D6:5D:11:A0:E6:50:6B:4D:1B:F8:16:88:5B:3B:5C:D5:A6"]
   }
 }]
