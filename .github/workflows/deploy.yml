@@ -32,6 +32,20 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Update assetlinks.json
+        run: |
+          mkdir -p ./dist/.well-known
+          cat > ./dist/.well-known/assetlinks.json << 'EOF'
+          [{
+            "relation": ["delegate_permission/common.handle_all_urls"],
+            "target": {
+              "namespace": "android_app",
+              "package_name": "io.github.zidanammar7111_cpu.twa",
+              "sha256_cert_fingerprints": ["B0:B0:D3:51:F8:AC:50:C2:5E:53:B1:A5:6E:4F:C9:D6:5D:11:A0:E6:50:6B:4D:1B:F8:16:88:5B:3B:5C:D5:A6"]
+            }
+          }]
+          EOF
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
