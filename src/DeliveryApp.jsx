@@ -746,4 +746,82 @@ function SettingsScreen({ data, persist, onBack, showToast, onLogout }) {
       if(e.type!=="order") return e;
       const rate=prev.exchangeRate||1;
       const orderValueTotalUSD=(e.orderValueUSD||0)+(e.orderValueLBP||0)/rate;
-      const profit
+      const profitTotalUSD=(e.profitUSD||0)+(e.profitLBP||0)/rate;
+      const dueToCompanyUSD=orderValueTotalUSD-profitTotalUSD;
+      const paidTotalUSD=(e.paidUSD||0)+(e.paidLBP||0)/rate;
+      const tipsTotalUSD=Math.max(0, paidTotalUSD-profitTotalUSD-dueToCompanyUSD);
+      return {...e,orderValueTotalUSD,profitTotalUSD,dueToCompanyUSD,paidTotalUSD,tipsUSD:tipsTotalUSD,tipsLBP:tipsTotalUSD*rate,tipsTotalUSD};
+    })}));
+    showToast("تم تحديث كل العمليات");
+  };
+
+  return (
+    <div style={{ padding: "16px 16px 0" }}>
+      <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 18 }}>الإعدادات</div>
+
+      {/* تغيير بيانات الدخول */}
+      <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 14 }}>
+        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>بيانات تسجيل الدخول</div>
+        {editingAuth ? (
+          <>
+            <Field label="اسم المستخدم الجديد">
+              <input style={inputStyle} value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder="اسم المستخدم" />
+            </Field>
+            <Field label="كلمة المرور الجديدة">
+              <div style={{ position: "relative" }}>
+                <input style={inputStyle} type={showPass ? "text" : "password"} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="كلمة المرور الجديدة" />
+                <button onClick={() => setShowPass(s => !s)} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: COLORS.textDim, cursor: "pointer" }}>
+                  {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </Field>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={saveAuth} style={{ flex: 1, background: COLORS.green, border: "none", borderRadius: 10, padding: "12px", color: "#fff", fontWeight: 700, cursor: "pointer" }}>حفظ</button>
+              <button onClick={() => setEditingAuth(false)} style={{ flex: 1, background: COLORS.bgCard2, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "12px", color: COLORS.text, fontWeight: 700, cursor: "pointer" }}>إلغاء</button>
+            </div>
+          </>
+        ) : (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ fontSize: 14, color: COLORS.textDim }}>المستخدم: <span style={{ color: COLORS.text, fontWeight: 700 }}>{data.auth?.username || "admin"}</span></div>
+            <button onClick={() => setEditingAuth(true)} style={{ background: "none", border: "none", color: COLORS.blue, cursor: "pointer", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}><Edit3 size={14} /> تغيير</button>
+          </div>
+        )}
+      </div>
+
+      {/* سعر الصرف */}
+      <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 14 }}>
+        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>سعر صرف الدولار</div>
+        {editingRate ? (
+          <div style={{ display: "flex", gap: 8 }}>
+            <input style={{ ...inputStyle, flex: 1 }} type="number" value={rateInput} onChange={(e) => setRateInput(e.target.value)} autoFocus />
+            <button onClick={saveRate} style={{ background: COLORS.green, border: "none", borderRadius: 10, padding: "0 16px", color: "#fff", cursor: "pointer" }}><Check size={18} /></button>
+          </div>
+        ) : (
+          <button onClick={() => { setRateInput(data.exchangeRate.toString()); setEditingRate(true); }} style={{ display: "flex", justifyContent: "space-between", width: "100%", background: COLORS.bgCard2, border: "none", borderRadius: 10, padding: "12px 14px", color: COLORS.text, cursor: "pointer", fontSize: 15 }}>
+            <span>1$ = {fmtLBP(data.exchangeRate)} ل.ل</span>
+            <Edit3 size={16} color={COLORS.textDim} />
+          </button>
+        )}
+      </div>
+
+      {/* إعادة حساب */}
+      <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 14 }}>
+        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>إعادة حساب كل العمليات</div>
+        <div style={{ fontSize: 12, color: COLORS.textFaint, marginBottom: 12, lineHeight: 1.6 }}>يحدّث التيبس والمرتب لكل العمليات القديمة بسعر الصرف الحالي.</div>
+        <button onClick={recalcAll} style={{ width: "100%", background: COLORS.bgCard2, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "12px", color: COLORS.text, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontWeight: 700, cursor: "pointer" }}><RefreshCw size={16} /> إعادة حساب الآن</button>
+      </div>
+
+      {/* تسجيل خروج */}
+      <button onClick={onLogout} style={{ width: "100%", background: COLORS.red, border: "none", borderRadius: 14, padding: "14px", color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", marginBottom: 14 }}>
+        تسجيل الخروج
+      </button>
+
+      <div style={{ background: "#1a2230", border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, fontSize: 13, color: COLORS.textDim, lineHeight: 1.7 }}>
+        <div style={{ fontWeight: 800, color: COLORS.text, marginBottom: 8 }}>ملاحظات مهمة</div>
+        • البيانات تُحفظ محلياً على هذا الجهاز تلقائياً<br />
+        • يمكنك تغيير سعر الصرف في أي وقت من هنا<br />
+        • تسكير الحساب لا يحذف البيانات، فقط يحفظ نسخة من الملخص
+      </div>
+    </div>
+  );
+}
