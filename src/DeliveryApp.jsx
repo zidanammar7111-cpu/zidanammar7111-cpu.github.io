@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Home, BarChart3, Settings, Plus, ChevronLeft,
   ShoppingBag, HandCoins, Banknote, Lock, ArrowLeftRight, X, Trash2,
-  ChevronRight as ChevronRightIcon, Edit3, Check, RefreshCw
+  ChevronRight as ChevronRightIcon, Edit3, Check, RefreshCw, Eye, EyeOff
 } from "lucide-react";
 
 const COLORS = {
@@ -25,6 +25,7 @@ const DEFAULT_DATA = {
   companies: [],
   entries: [],
   closures: [],
+  auth: { username: "admin", password: "1234" },
 };
 
 function loadData() {
@@ -142,14 +143,82 @@ function computeTotals(data) {
   return { profit, debt, expense, tips, dueToCompany, paidUSD, paidLBP };
 }
 
+// شاشة السبلاش
+function SplashScreen() {
+  return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #11151c 0%, #1b212b 50%, #11151c 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24 }}>
+      <div style={{ fontSize: 80, animation: "pulse 1.5s infinite" }}>🛵</div>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.text, letterSpacing: 1 }}>دليفري بزنس</div>
+        <div style={{ fontSize: 14, color: COLORS.textDim, marginTop: 6 }}>إدارة الدليفري والحسابات</div>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+        {[0,1,2].map((i) => (
+          <div key={i} style={{ width: 8, height: 8, borderRadius: 99, background: COLORS.green, opacity: 0.3 + i * 0.35 }} />
+        ))}
+      </div>
+      <style>{`@keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} }`}</style>
+    </div>
+  );
+}
+
+// شاشة تسجيل الدخول
+function LoginScreen({ onLogin, auth }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = () => {
+    if (username === auth.username && password === auth.password) {
+      onLogin();
+    } else {
+      setError("اسم المستخدم أو كلمة المرور غير صحيحة");
+    }
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #11151c 0%, #1b212b 50%, #11151c 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ textAlign: "center", marginBottom: 32 }}>
+        <div style={{ fontSize: 60, marginBottom: 12 }}>🛵</div>
+        <div style={{ fontSize: 26, fontWeight: 800, color: COLORS.text }}>دليفري بزنس</div>
+        <div style={{ fontSize: 14, color: COLORS.textDim, marginTop: 4 }}>إدارة الدليفري والحسابات</div>
+      </div>
+      <div style={{ width: "100%", maxWidth: 400, background: COLORS.bgCard, borderRadius: 20, padding: 24, border: `1px solid ${COLORS.border}` }}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: COLORS.text, marginBottom: 20, textAlign: "center" }}>تسجيل الدخول</div>
+        <Field label="اسم المستخدم">
+          <input style={inputStyle} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="أدخل اسم المستخدم" autoCapitalize="none" />
+        </Field>
+        <Field label="كلمة المرور">
+          <div style={{ position: "relative" }}>
+            <input style={inputStyle} type={showPass ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="أدخل كلمة المرور" onKeyDown={(e) => e.key === "Enter" && submit()} />
+            <button onClick={() => setShowPass(s => !s)} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: COLORS.textDim, cursor: "pointer" }}>
+              {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+        </Field>
+        {error && <div style={{ color: COLORS.red, fontSize: 13, marginBottom: 10, fontWeight: 600, textAlign: "center" }}>{error}</div>}
+        <SaveButton onClick={submit} label="دخول" disabled={!username || !password} />
+      </div>
+    </div>
+  );
+}
+
 export default function DeliveryApp() {
   const [data, setData] = useState(() => loadData());
+  const [splash, setSplash] = useState(true);
+  const [loggedIn, setLoggedIn] = useState(false);
   const [screen, setScreen] = useState("home");
   const [selectedCompanyId, setSelectedCompanyId] = useState(null);
   const [entryFormType, setEntryFormType] = useState(null);
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [toast, setToast] = useState(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSplash(false), 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const persist = useCallback((updater) => {
     setData((prev) => {
@@ -160,6 +229,9 @@ export default function DeliveryApp() {
   }, []);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 1800); };
+
+  if (splash) return <SplashScreen />;
+  if (!loggedIn) return <LoginScreen onLogin={() => setLoggedIn(true)} auth={data.auth || DEFAULT_DATA.auth} />;
 
   const company = data.companies.find((c) => c.id === selectedCompanyId);
   const showNav = ["home", "reports", "settings"].includes(screen);
@@ -186,7 +258,7 @@ export default function DeliveryApp() {
   } else if (screen === "reports") {
     content = <ReportsScreen data={data} />;
   } else if (screen === "settings") {
-    content = <SettingsScreen data={data} persist={persist} onBack={() => setScreen("home")} showToast={showToast} />;
+    content = <SettingsScreen data={data} persist={persist} onBack={() => setScreen("home")} showToast={showToast} onLogout={() => setLoggedIn(false)} />;
   } else {
     content = <HomeScreen data={data} onOpenCompany={(id) => { setSelectedCompanyId(id); setScreen("company"); }} onAddCompany={() => setScreen("addCompany")} onOpenConvert={() => setScreen("convert")} onQuickAction={quickStart} />;
   }
@@ -251,12 +323,26 @@ function HomeScreen({ data, onOpenCompany, onAddCompany, onOpenConvert, onQuickA
   const totals = computeTotals(data);
   const todayStr = new Date().toDateString();
   const todayEntries = data.entries.filter((e) => new Date(e.createdAt).toDateString() === todayStr);
+  const todayProfit = todayEntries.filter(e => e.type === "order").reduce((s, e) => s + (e.profitTotalUSD || 0), 0);
+  const todayOrders = todayEntries.filter(e => e.type === "order").length;
+
   return (
     <div style={{ padding: "16px 16px 0" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
         <div style={{ fontSize: 22, fontWeight: 800 }}>الرئيسية</div>
         <button onClick={onOpenConvert} style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "8px 12px", color: COLORS.text, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}><ArrowLeftRight size={16} /><span style={{ fontSize: 13, fontWeight: 700 }}>تحويل عملة</span></button>
       </div>
+
+      {/* بطاقة اليوم */}
+      <div style={{ background: "linear-gradient(135deg, #16a34a, #22c55e)", borderRadius: 20, padding: "18px 20px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ color: "rgba(255,255,255,0.8)", fontSize: 13, fontWeight: 600 }}>أرباح اليوم</div>
+          <div style={{ color: "#fff", fontSize: 28, fontWeight: 800, marginTop: 4 }}>${fmt(todayProfit)}</div>
+          <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, marginTop: 4 }}>{todayOrders} طلب اليوم</div>
+        </div>
+        <div style={{ fontSize: 48 }}>🛵</div>
+      </div>
+
       <div style={{ fontSize: 13, color: COLORS.textDim, marginBottom: 8, fontWeight: 700 }}>المجموع الكلي المقبوض من الزبائن</div>
       <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
         <div style={{ flex: 1, background: COLORS.green, borderRadius: 16, padding: "16px 14px" }}><div style={{ color: "#fff", fontSize: 12, fontWeight: 700, opacity: 0.85 }}>$ مجموع الدولار</div><div style={{ color: "#fff", fontSize: 22, fontWeight: 800, marginTop: 4 }}>${fmt(totals.paidUSD)}</div></div>
@@ -396,7 +482,7 @@ function EntryRow({ entry, onDelete, onEdit }) {
       </div>
       {open && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${COLORS.border}`, fontSize: 13, color: COLORS.textDim, display: "flex", flexDirection: "column", gap: 4 }}>
-          {entry.type === "order" && (<><Row label="قيمة الطلب" value={fmtDual(entry.orderValueUSD, entry.orderValueLBP)} /><Row label="الربح" value={fmtDual(entry.profitUSD, entry.profitLBP)} /><div style={{ background: COLORS.bgCard2, borderRadius: 10, padding: "8px 10px", margin: "4px 0" }}><Row label="المطلوب للشركة" value={`$${fmt(entry.dueToCompanyUSD)}`} valueColor={COLORS.orange} /></div><Row label="المقبوض دولار" value={`$${fmt(entry.paidUSD)}`} /><Row label="المقبوض ليرة" value={`${fmtLBP(entry.paidLBP)} ل.ل`} /><Row label="التيبس" value={`${entry.tipsTotalUSD >= 0 ? "+" : ""}${fmtDual(entry.tipsUSD, entry.tipsLBP)}`} valueColor={entry.tipsTotalUSD >= 0 ? COLORS.green : COLORS.red} />{entry.orderNumber && <Row label="رقم الطلب" value={entry.orderNumber} />}{entry.note && <Row label="ملاحظات" value={entry.note} />}</>)}
+          {entry.type === "order" && (<><Row label="قيمة الطلب" value={fmtDual(entry.orderValueUSD, entry.orderValueLBP)} /><Row label="الربح" value={fmtDual(entry.profitUSD, entry.profitLBP)} /><div style={{ background: COLORS.bgCard2, borderRadius: 10, padding: "8px 10px", margin: "4px 0" }}><Row label="المطلوب للشركة" value={`$${fmt(entry.dueToCompanyUSD)}`} valueColor={COLORS.orange} /></div><Row label="المقبوض دولار" value={`$${fmt(entry.paidUSD)}`} /><Row label="المقبوض ليرة" value={`${fmtLBP(entry.paidLBP)} ل.ل`} /><Row label="التيبس" value={`+${fmtDual(entry.tipsUSD, entry.tipsLBP)}`} valueColor={COLORS.green} />{entry.orderNumber && <Row label="رقم الطلب" value={entry.orderNumber} />}{entry.note && <Row label="ملاحظات" value={entry.note} />}</>)}
           {entry.type !== "order" && (<>{(entry.type === "expense" || entry.type === "debt") && entry.amountLBP ? <Row label="المبلغ" value={fmtDual(entry.rawUSD||entry.amountUSD, entry.amountLBP)} /> : <Row label="المبلغ" value={`$${fmt(entry.amountUSD)}`} />}{entry.reason && <Row label="السبب / النوع" value={entry.reason} />}{entry.note && <Row label="ملاحظات" value={entry.note} />}</>)}
           <div style={{ display: "flex", gap: 14, marginTop: 6 }}>
             <button onClick={onEdit} style={{ background: "none", border: "none", color: COLORS.blue, fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Edit3 size={13} /> تعديل</button>
@@ -454,7 +540,7 @@ function OrderForm({ company, companies, data, editingEntry, onBack, onSave }) {
   const profitTotalUSD = prUSD + prLBP/rate;
   const dueToCompanyUSD = orderValueTotalUSD - profitTotalUSD;
   const paidTotalUSD = pUSD + pLBP/rate;
-  const tipsTotalUSD = paidTotalUSD - profitTotalUSD - dueToCompanyUSD;
+  const tipsTotalUSD = Math.max(0, paidTotalUSD - profitTotalUSD - dueToCompanyUSD);
   const tipsTotalLBP = tipsTotalUSD * rate;
   const grandTotalUSD = orderValueTotalUSD + profitTotalUSD + paidTotalUSD + tipsTotalUSD;
   const valid = orderValueTotalUSD > 0;
@@ -465,7 +551,7 @@ function OrderForm({ company, companies, data, editingEntry, onBack, onSave }) {
       <div style={{ padding: "0 16px" }}>
         {companies.length > 1 && <Field label="الشركة"><select style={{ ...inputStyle, appearance: "none" }} value={companyId} onChange={(ev) => setCompanyId(ev.target.value)}>{companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>}
         <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 16 }}>
-          <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 10, fontWeight: 700 }}>المجموع الكلي لهذا الطلب</div>
+          <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 10, fontWeight: 700 }}>ملخص الطلب</div>
           <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
             <div style={{ flex: 1, background: COLORS.green, borderRadius: 12, padding: "12px 10px" }}><div style={{ color: "#fff", fontSize: 11, fontWeight: 700, opacity: 0.85 }}>$ بالدولار</div><div style={{ color: "#fff", fontSize: 17, fontWeight: 800, marginTop: 2 }}>${fmt(grandTotalUSD)}</div></div>
             <div style={{ flex: 1, background: COLORS.blue, borderRadius: 12, padding: "12px 10px" }}><div style={{ color: "#fff", fontSize: 11, fontWeight: 700, opacity: 0.85 }}>ل.ل بالليرة</div><div style={{ color: "#fff", fontSize: 15, fontWeight: 800, marginTop: 2 }}>{fmtLBP(grandTotalUSD * rate)}</div></div>
@@ -473,14 +559,13 @@ function OrderForm({ company, companies, data, editingEntry, onBack, onSave }) {
           <div style={{ borderTop: `1px solid ${COLORS.border}`, paddingTop: 12 }}>
             <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 4, fontWeight: 700 }}>مرتب للشركة</div>
             <div style={{ fontSize: 22, fontWeight: 800, color: COLORS.orange }}>${fmt(dueToCompanyUSD)}</div>
-            <div style={{ fontSize: 12, color: COLORS.textFaint, marginTop: 2 }}>≈ {fmtLBP(dueToCompanyUSD * rate)} ل.ل</div>
           </div>
         </div>
         <DualCurrencyField label="قيمة الطلب" usd={orderValueUSD} lbp={orderValueLBP} onUsdChange={setOrderValueUSD} onLbpChange={setOrderValueLBP} />
         <DualCurrencyField label="الربح" usd={profitUSD} lbp={profitLBP} onUsdChange={setProfitUSD} onLbpChange={setProfitLBP} />
         <DualCurrencyField label="المقبوض من الزبون" usd={paidUSD} lbp={paidLBP} onUsdChange={setPaidUSD} onLbpChange={setPaidLBP} />
         <div style={{ background: COLORS.bgCard2, borderRadius: 12, padding: 12, marginBottom: 14 }}>
-          <Row label="التيبس" value={`${tipsTotalUSD >= 0 ? "+" : ""}$${fmt(tipsTotalUSD)} (${fmtLBP(tipsTotalLBP)} ل.ل)`} valueColor={tipsTotalUSD >= 0 ? COLORS.green : COLORS.red} />
+          <Row label="التيبس" value={`+$${fmt(tipsTotalUSD)} (${fmtLBP(tipsTotalLBP)} ل.ل)`} valueColor={COLORS.green} />
         </div>
         <Field label="رقم الطلب (اختياري)"><input style={inputStyle} value={orderNumber} onChange={(ev) => setOrderNumber(ev.target.value)} placeholder="#1258" /></Field>
         <Field label="ملاحظات (اختياري)"><input style={inputStyle} value={note} onChange={(ev) => setNote(ev.target.value)} placeholder="مثال: طلب من مطعم..." /></Field>
@@ -577,9 +662,7 @@ function ConvertScreen({ data, persist, onBack, showToast }) {
           <button onClick={() => setDirection("usd_to_lbp")} style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", fontWeight: 700, cursor: "pointer", background: direction==="usd_to_lbp"?COLORS.green:"transparent", color: direction==="usd_to_lbp"?"#fff":COLORS.textDim }}>دولار ← ليرة</button>
           <button onClick={() => setDirection("lbp_to_usd")} style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", fontWeight: 700, cursor: "pointer", background: direction==="lbp_to_usd"?COLORS.blue:"transparent", color: direction==="lbp_to_usd"?"#fff":COLORS.textDim }}>ليرة ← دولار</button>
         </div>
-        <Field label={direction==="usd_to_lbp"?"المبلغ بالدولار":"المبلغ بالليرة (بالألف)"}>
-          <input style={inputStyle} type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" autoFocus />
-        </Field>
+        <Field label={direction==="usd_to_lbp"?"المبلغ بالدولار":"المبلغ بالليرة (بالألف)"}><input style={inputStyle} type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" autoFocus /></Field>
         <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 20, textAlign: "center", marginBottom: 16 }}>
           <div style={{ fontSize: 13, color: COLORS.textDim, marginBottom: 8 }}>النتيجة</div>
           <div style={{ fontSize: 28, fontWeight: 800, color: direction==="usd_to_lbp"?COLORS.blue:COLORS.green }}>{direction==="usd_to_lbp"?`${fmtLBP(result)} ل.ل`:`$${fmt(result)}`}</div>
@@ -640,51 +723,27 @@ function ReportsScreen({ data }) {
   );
 }
 
-function SettingsScreen({ data, persist, onBack, showToast }) {
+function SettingsScreen({ data, persist, onBack, showToast, onLogout }) {
   const [editingRate, setEditingRate] = useState(false);
   const [rateInput, setRateInput] = useState(data.exchangeRate.toString());
+  const [editingAuth, setEditingAuth] = useState(false);
+  const [newUsername, setNewUsername] = useState(data.auth?.username || "admin");
+  const [newPassword, setNewPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
+
   const saveRate = () => { const r=parseFloat(rateInput); if(r>0){persist((prev)=>({...prev,exchangeRate:r}));} setEditingRate(false); };
+
+  const saveAuth = () => {
+    if (!newUsername.trim() || !newPassword.trim()) { showToast("أدخل اسم المستخدم وكلمة المرور"); return; }
+    persist((prev) => ({ ...prev, auth: { username: newUsername.trim(), password: newPassword } }));
+    showToast("تم تغيير بيانات الدخول");
+    setEditingAuth(false);
+    setNewPassword("");
+  };
+
   const recalcAll = () => {
     persist((prev) => ({ ...prev, entries: prev.entries.map((e) => {
       if(e.type!=="order") return e;
       const rate=prev.exchangeRate||1;
       const orderValueTotalUSD=(e.orderValueUSD||0)+(e.orderValueLBP||0)/rate;
-      const profitTotalUSD=(e.profitUSD||0)+(e.profitLBP||0)/rate;
-      const dueToCompanyUSD=orderValueTotalUSD-profitTotalUSD;
-      const paidTotalUSD=(e.paidUSD||0)+(e.paidLBP||0)/rate;
-      const tipsTotalUSD=paidTotalUSD-profitTotalUSD-dueToCompanyUSD;
-      return {...e,orderValueTotalUSD,profitTotalUSD,dueToCompanyUSD,paidTotalUSD,tipsUSD:tipsTotalUSD,tipsLBP:tipsTotalUSD*rate,tipsTotalUSD};
-    })}));
-    showToast("تم تحديث كل العمليات");
-  };
-  return (
-    <div style={{ padding: "16px 16px 0" }}>
-      <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 18 }}>الإعدادات</div>
-      <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 14 }}>
-        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>سعر صرف الدولار</div>
-        {editingRate ? (
-          <div style={{ display: "flex", gap: 8 }}>
-            <input style={{ ...inputStyle, flex: 1 }} type="number" value={rateInput} onChange={(e) => setRateInput(e.target.value)} autoFocus />
-            <button onClick={saveRate} style={{ background: COLORS.green, border: "none", borderRadius: 10, padding: "0 16px", color: "#fff", cursor: "pointer" }}><Check size={18} /></button>
-          </div>
-        ) : (
-          <button onClick={() => { setRateInput(data.exchangeRate.toString()); setEditingRate(true); }} style={{ display: "flex", justifyContent: "space-between", width: "100%", background: COLORS.bgCard2, border: "none", borderRadius: 10, padding: "12px 14px", color: COLORS.text, cursor: "pointer", fontSize: 15 }}>
-            <span>1$ = {fmtLBP(data.exchangeRate)} ل.ل</span>
-            <Edit3 size={16} color={COLORS.textDim} />
-          </button>
-        )}
-      </div>
-      <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 14 }}>
-        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>إعادة حساب كل العمليات</div>
-        <div style={{ fontSize: 12, color: COLORS.textFaint, marginBottom: 12, lineHeight: 1.6 }}>يحدّث التيبس والمرتب لكل العمليات القديمة بسعر الصرف الحالي.</div>
-        <button onClick={recalcAll} style={{ width: "100%", background: COLORS.bgCard2, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "12px", color: COLORS.text, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontWeight: 700, cursor: "pointer" }}><RefreshCw size={16} /> إعادة حساب الآن</button>
-      </div>
-      <div style={{ background: "#1a2230", border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, fontSize: 13, color: COLORS.textDim, lineHeight: 1.7 }}>
-        <div style={{ fontWeight: 800, color: COLORS.text, marginBottom: 8 }}>ملاحظات مهمة</div>
-        • البيانات تُحفظ محلياً على هذا الجهاز تلقائياً<br />
-        • يمكنك تغيير سعر الصرف في أي وقت من هنا<br />
-        • تسكير الحساب لا يحذف البيانات، فقط يحفظ نسخة من الملخص
-      </div>
-    </div>
-  );
-}
+      const profit
