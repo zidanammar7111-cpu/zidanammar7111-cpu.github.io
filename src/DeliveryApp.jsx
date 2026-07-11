@@ -50,7 +50,6 @@ const DEFAULT_DATA = {
   orders: [],
   expenses: [],
   personalDebts: [],
-  users: FIXED_USERS,
 };
 
 function loadLocal() {
@@ -155,15 +154,13 @@ function LoginScreen({ onLogin }) {
     }
   };
 
-  const handleBiometric = async () => {
-    try {
-      const savedUser = localStorage.getItem("biometric_user");
-      if (savedUser) {
-        onLogin(JSON.parse(savedUser));
-      } else {
-        setError("سجّل دخول مرة بكلمة المرور أولاً");
-      }
-    } catch { setError("فشلت البصمة"); }
+  const handleBiometric = () => {
+    const savedUser = localStorage.getItem("biometric_user");
+    if (savedUser) {
+      onLogin(JSON.parse(savedUser));
+    } else {
+      setError("سجّل دخول مرة بكلمة المرور أولاً لتفعيل البصمة");
+    }
   };
 
   const today = new Date();
@@ -209,7 +206,6 @@ export default function DeliveryApp() {
   const [syncing, setSyncing] = useState(false);
   const skipSync = useRef(false);
 
-  // فتح فوري + مزامنة في الخلفية
   useEffect(() => {
     loadFromCloud().then(cloudData => {
       if (cloudData) {
@@ -220,7 +216,6 @@ export default function DeliveryApp() {
     }).catch(() => {});
   }, []);
 
-  // مزامنة لحظية
   useEffect(() => {
     const unsub = subscribeToCloud((cloudData) => {
       if (skipSync.current) { skipSync.current = false; return; }
@@ -352,10 +347,10 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
   const todayStr = new Date().toDateString();
   const todayOrders = orders.filter(o => new Date(o.createdAt).toDateString()===todayStr);
   const todayProfitUSD = todayOrders.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.profit||0),0);
-  const todayProfitLBP = todayOrders.filter(o=>o.currency==="lbp").reduce((s,o)=>s+(o.profit||0)*1000,0);
   const todayTipsUSD = todayOrders.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.tips||0),0);
   const totalDueUSD = companies.reduce((s,c)=>s+getCompanyDue(data,c.id).dueUSD,0);
   const totalExpUSD = (data.expenses||[]).filter(e=>e.currency==="usd").reduce((s,e)=>s+(e.amount||0),0);
+  const totalExpLBP = (data.expenses||[]).filter(e=>e.currency==="lbp").reduce((s,e)=>s+(e.amount||0)*1000,0);
 
   const today = new Date();
   const dayNames = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
@@ -383,26 +378,29 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
           <div style={{ fontSize:40 }}>🛵</div>
         </div>
 
+        {/* عبارة اليوم */}
         <div style={{ background:"rgba(0,200,150,0.08)", border:`1px solid ${COLORS.green}20`, borderRadius:12, padding:"10px 14px", marginBottom:14 }}>
-          <div style={{ fontSize:11, color:COLORS.green, fontWeight:700, marginBottom:4 }}>💡 عبارة اليوم</div>
-          <div style={{ fontSize:13, color:COLORS.text, lineHeight:1.5 }}>{DAILY_QUOTES[quoteIndex]}</div>
+          <div style={{ fontSize:11, color:COLORS.green, fontWeight:700, marginBottom:3 }}>💡 عبارة اليوم</div>
+          <div style={{ fontSize:12, color:COLORS.text, lineHeight:1.5 }}>{DAILY_QUOTES[quoteIndex]}</div>
         </div>
 
-        <div style={{ display:"flex", gap:8, marginBottom:16, overflowX:"auto", paddingBottom:4 }}>
+        {/* شريط الإحصائيات السريعة — 4 بجانب بعض */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:6, marginBottom:16 }}>
           {[
-            {icon:"📦",label:"طلبات اليوم",value:`${todayOrders.length}`,color:COLORS.text},
-            {icon:"💰",label:"أرباح اليوم",value:`$${fmt(todayProfitUSD)}`,color:COLORS.green},
-            {icon:"🎁",label:"تيبس اليوم",value:`$${fmt(todayTipsUSD)}`,color:COLORS.purple},
-            {icon:"🏢",label:"مترتب",value:`$${fmt(totalDueUSD)}`,color:COLORS.orange},
+            {icon:"📦",label:"طلبات",value:`${todayOrders.length}`,color:COLORS.text},
+            {icon:"💰",label:"أرباح",value:`$${fmt(todayProfitUSD,0)}`,color:COLORS.green},
+            {icon:"🎁",label:"تيبس",value:`$${fmt(todayTipsUSD,0)}`,color:COLORS.purple},
+            {icon:"🏢",label:"مترتب",value:`$${fmt(totalDueUSD,0)}`,color:COLORS.orange},
           ].map((s,i)=>(
-            <div key={i} style={{ flexShrink:0, background:"rgba(255,255,255,0.06)", border:`1px solid ${COLORS.border}`, borderRadius:14, padding:"10px 14px", minWidth:100 }}>
-              <div style={{ fontSize:16, marginBottom:4 }}>{s.icon}</div>
-              <div style={{ fontSize:10, color:COLORS.textDim, marginBottom:2 }}>{s.label}</div>
-              <div style={{ fontSize:14, fontWeight:800, color:s.color }}>{s.value}</div>
+            <div key={i} style={{ background:"rgba(255,255,255,0.06)", border:`1px solid ${COLORS.border}`, borderRadius:12, padding:"8px 6px", textAlign:"center" }}>
+              <div style={{ fontSize:14, marginBottom:3 }}>{s.icon}</div>
+              <div style={{ fontSize:9, color:COLORS.textDim, marginBottom:2 }}>{s.label}</div>
+              <div style={{ fontSize:12, fontWeight:800, color:s.color }}>{s.value}</div>
             </div>
           ))}
         </div>
 
+        {/* الرصيد */}
         <div style={{ display:"flex", gap:10, marginBottom:16 }}>
           <div style={{ flex:1, background:"rgba(0,200,150,0.15)", border:`1px solid ${COLORS.green}40`, borderRadius:16, padding:"14px 12px" }}>
             <div style={{ color:COLORS.green, fontSize:11, fontWeight:700, marginBottom:4 }}>$ بالدولار</div>
@@ -416,6 +414,7 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
       </div>
 
       <div style={{ padding:"16px 16px 0" }}>
+        {/* إحصائيات */}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
           <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:14, padding:"12px 14px" }}>
             <div style={{ fontSize:11, color:COLORS.textDim, marginBottom:4 }}>مترتب للشركات</div>
@@ -423,10 +422,12 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
           </div>
           <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:14, padding:"12px 14px" }}>
             <div style={{ fontSize:11, color:COLORS.textDim, marginBottom:4 }}>المصروفات</div>
-            <div style={{ fontSize:18, fontWeight:800, color:COLORS.red }}>${fmt(totalExpUSD)}</div>
+            <div style={{ fontSize:16, fontWeight:800, color:COLORS.red }}>${fmt(totalExpUSD)}</div>
+            {totalExpLBP>0 && <div style={{ fontSize:11, color:COLORS.blue }}>{fmtLBP(totalExpLBP)} ل.ل</div>}
           </div>
         </div>
 
+        {/* أزرار سريعة */}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
           <button onClick={()=>setShowQuickOrder(true)} style={{ background:`linear-gradient(135deg, ${COLORS.green}30, ${COLORS.green}10)`, border:`2px solid ${COLORS.green}50`, borderRadius:14, padding:"16px 12px", display:"flex", alignItems:"center", gap:10, cursor:"pointer" }}>
             <span style={{ fontSize:24 }}>📦</span>
@@ -452,6 +453,7 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
           </button>
         </div>
 
+        {/* الشركات */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
           <div style={{ fontSize:16, fontWeight:800 }}>🏢 الشركات</div>
           <button onClick={()=>setShowAddCompany(true)} style={{ background:`${COLORS.green}20`, border:`1px solid ${COLORS.green}40`, borderRadius:10, padding:"8px 14px", color:COLORS.green, fontWeight:700, fontSize:13, cursor:"pointer" }}>+ إضافة</button>
@@ -547,7 +549,7 @@ function QuickOrderSheet({ data, persist, showToast, rate, currentUser, companie
 
   return (
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:200, display:"flex", alignItems:"flex-end" }}>
-      <div onClick={e=>e.stopPropagation()} style={{ width:"100%", background:COLORS.bgCard, borderRadius:"20px 20px 0 0", padding:"18px 16px calc(24px + env(safe-area-inset-bottom))", maxHeight:"85vh", overflowY:"auto" }}>
+      <div onClick={e=>e.stopPropagation()} style={{ width:"100%", background:COLORS.bgCard, borderRadius:"20px 20px 0 0", padding:"18px 16px calc(24px + env(safe-area-inset-bottom))", maxHeight:"90vh", overflowY:"auto" }}>
         <div style={{ width:40, height:4, background:COLORS.border, borderRadius:99, margin:"0 auto 16px" }} />
         <div style={{ fontSize:16, fontWeight:800, marginBottom:16, textAlign:"center" }}>📦 طلب سريع</div>
         {step==="company" && (
@@ -565,12 +567,12 @@ function QuickOrderSheet({ data, persist, showToast, rate, currentUser, companie
         )}
         {step==="order" && (
           <>
-            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16, background:COLORS.bgCard2, borderRadius:12, padding:10 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14, background:COLORS.bgCard2, borderRadius:12, padding:10 }}>
               {companies.length>1 && <button onClick={()=>setStep("company")} style={{ background:"none", border:"none", color:COLORS.textDim, cursor:"pointer" }}><ChevronRightIcon size={20}/></button>}
               <div style={{ width:32, height:32, borderRadius:8, background:selectedCompany?.color, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, color:"#fff", fontSize:14 }}>{selectedCompany?.name.slice(0,1)}</div>
               <div style={{ fontWeight:800 }}>{selectedCompany?.name}</div>
             </div>
-            <div style={{ background:COLORS.bgCard2, borderRadius:14, padding:14, marginBottom:14 }}>
+            <div style={{ background:COLORS.bgCard2, borderRadius:14, padding:12, marginBottom:14 }}>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
                 {[
                   {label:"مترتب",value:currency==="usd"?`$${fmt(dueToCompany)}`:`${fmt(dueToCompany)} ألف`,color:COLORS.orange},
@@ -859,7 +861,7 @@ function ExpensesScreen({ data, persist, showToast, goTo, rate, onEdit }) {
   const deleteExpense=(id)=>{
     const exp=expenses.find(e=>e.id===id);
     if(!exp) return;
-    persist(prev=>({...prev,expenses:prev.expenses.filter(e=>e.id!==id),balanceUSD:exp.currency==="usd"?(prev.balanceUSD||0)+(exp.amount||0):prev.balanceUSD||0,balanceLBP:exp.currency==="lbp"?(prev.balanceLBP||0)+(exp.amount||0)*1000:prev.balanceLBP||0}));
+    persist(prev=>({...prev,expenses:prev.expenses.filter(e=>e.id!==id),balanceUSD:exp.currency==="usd"&&exp.affectsBalance!==false?(prev.balanceUSD||0)+(exp.amount||0):prev.balanceUSD||0,balanceLBP:exp.currency==="lbp"&&exp.affectsBalance!==false?(prev.balanceLBP||0)+(exp.amount||0)*1000:prev.balanceLBP||0}));
     showToast("تم حذف المصروف");
   };
   return (
@@ -881,17 +883,19 @@ function ExpensesScreen({ data, persist, showToast, goTo, rate, onEdit }) {
         </div>
         {filtered.length===0&&<div style={{ textAlign:"center", color:COLORS.textFaint, padding:"40px 0" }}>لا توجد مصروفات</div>}
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {[...filtered].sort((a,b)=>b.createdAt-a.createdAt).map(exp=><ExpenseCard key={exp.id} expense={exp} onDelete={()=>deleteExpense(exp.id)} onEdit={()=>onEdit(exp)} />)}
+          {[...filtered].sort((a,b)=>b.createdAt-a.createdAt).map(exp=><ExpenseCard key={exp.id} expense={exp} onDelete={()=>deleteExpense(exp.id)} onEdit={()=>onEdit(exp)} rate={rate} />)}
         </div>
       </div>
     </div>
   );
 }
 
-function ExpenseCard({ expense, onDelete, onEdit }) {
+function ExpenseCard({ expense, onDelete, onEdit, rate }) {
   const [open,setOpen]=useState(false);
   const isUSD=expense.currency==="usd";
   const dt=new Date(expense.createdAt);
+  const displayUSD = isUSD ? expense.amount : (expense.amount*1000/rate);
+  const displayLBP = isUSD ? null : expense.amount*1000;
   return (
     <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:14, overflow:"hidden" }}>
       <div onClick={()=>setOpen(o=>!o)} style={{ padding:"12px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }}>
@@ -902,12 +906,17 @@ function ExpenseCard({ expense, onDelete, onEdit }) {
             <div style={{ fontSize:11, color:COLORS.textFaint }}>{dt.toLocaleDateString("ar-LB")} · {dt.toLocaleTimeString("ar-LB",{hour:"2-digit",minute:"2-digit"})} {expense.byName?`· ${expense.byName}`:""}</div>
           </div>
         </div>
-        <div style={{ fontWeight:800, color:COLORS.red, fontSize:15 }}>{isUSD?`-$${fmt(expense.amount)}`:`-${fmt(expense.amount)} ألف ل.ل`}</div>
+        <div style={{ textAlign:"left" }}>
+          <div style={{ fontWeight:800, color:COLORS.red, fontSize:14 }}>-${fmt(displayUSD)}</div>
+          {!isUSD && <div style={{ fontSize:10, color:COLORS.textFaint }}>{fmtLBP(displayLBP)} ل.ل</div>}
+        </div>
       </div>
       {open&&(
         <div style={{ borderTop:`1px solid ${COLORS.border}`, padding:"12px 14px", display:"flex", flexDirection:"column", gap:6 }}>
           <Row label="النوع" value={expense.category||""} />
-          <Row label="المبلغ" value={isUSD?`$${fmt(expense.amount)}`:`${fmt(expense.amount)} ألف ل.ل`} valueColor={COLORS.red} />
+          <Row label="المبلغ الأصلي" value={isUSD?`$${fmt(expense.amount)}`:`${fmt(expense.amount)} ألف ل.ل`} valueColor={COLORS.red} />
+          {!isUSD && <Row label="بالدولار" value={`≈ $${fmt(displayUSD)}`} valueColor={COLORS.textDim} />}
+          {expense.affectsBalance===false && <div style={{ fontSize:11, color:COLORS.textFaint, background:COLORS.bgCard2, padding:"4px 8px", borderRadius:6 }}>⚠️ لم يُخصم من الرصيد</div>}
           {expense.note&&<Row label="ملاحظات" value={expense.note} />}
           <div style={{ display:"flex", gap:10, marginTop:6 }}>
             <button onClick={onEdit} style={{ background:"none", border:"none", color:COLORS.blue, fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}><Edit3 size={14}/> تعديل</button>
@@ -925,30 +934,49 @@ function ExpenseForm({ data, persist, showToast, editing, currentUser, onBack, r
   const [amount,setAmount]=useState(e?String(e.amount||""):"");
   const [category,setCategory]=useState(e?.category||"");
   const [note,setNote]=useState(e?.note||"");
+  const [affectsBalance,setAffectsBalance]=useState(e?.affectsBalance!==false);
   const categories=["بنزين","أكل","صيانة","إنترنت","كهرباء","إيجار","أخرى"];
   const valid=parseFloat(amount)>0;
+  const amt=parseFloat(amount)||0;
+  const amtUSD=currency==="usd"?amt:amt*1000/rate;
+
   const save=()=>{
-    const amt=parseFloat(amount)||0;
-    const expense={id:e?e.id:uid(),currency,amount:amt,category:category.trim(),note:note.trim(),createdAt:e?e.createdAt:Date.now(),byName:currentUser?.displayName||""};
+    const expense={id:e?e.id:uid(),currency,amount:amt,category:category.trim(),note:note.trim(),createdAt:e?e.createdAt:Date.now(),byName:currentUser?.displayName||"",affectsBalance};
     persist(prev=>{
       let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0;
-      if(e){ if(e.currency==="usd")newUSD+=e.amount||0; else newLBP+=(e.amount||0)*1000; }
-      if(currency==="usd")newUSD-=amt; else newLBP-=amt*1000;
+      if(e&&e.affectsBalance!==false){
+        if(e.currency==="usd")newUSD+=e.amount||0; else newLBP+=(e.amount||0)*1000;
+      }
+      if(affectsBalance){
+        if(currency==="usd")newUSD-=amt; else newLBP-=amt*1000;
+      }
       return {...prev,expenses:e?prev.expenses.map(ex=>ex.id===e.id?expense:ex):[...(prev.expenses||[]),expense],balanceUSD:newUSD,balanceLBP:newLBP};
     });
     showToast(e?"تم تعديل المصروف ✓":"تم حفظ المصروف ✓"); onBack();
   };
+
   return (
     <div>
       <TopBar title={e?"تعديل المصروف":"إضافة مصروف"} onBack={onBack} />
       <div style={{ padding:"0 16px" }}>
         <Field label="العملة"><CurrencyToggle value={currency} onChange={setCurrency} /></Field>
         <Field label={currency==="usd"?"المبلغ ($)":"المبلغ (ألف ل.ل)"}><AmountInput currency={currency} value={amount} onChange={setAmount} /></Field>
+        {currency==="lbp" && amt>0 && (
+          <div style={{ background:COLORS.bgCard2, borderRadius:10, padding:"8px 12px", marginBottom:14, fontSize:12, color:COLORS.textDim }}>
+            يُعرض بالدولار: ≈ <span style={{ color:COLORS.red, fontWeight:700 }}>${fmt(amtUSD)}</span>
+          </div>
+        )}
         <Field label="النوع / الفئة">
           <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:8 }}>
             {categories.map(c=><button key={c} onClick={()=>setCategory(c)} style={{ padding:"8px 14px", borderRadius:20, border:`1px solid ${category===c?COLORS.red:COLORS.border}`, background:category===c?`${COLORS.red}20`:"transparent", color:category===c?COLORS.red:COLORS.textDim, fontWeight:600, fontSize:13, cursor:"pointer" }}>{c}</button>)}
           </div>
           <input style={inputStyle} value={category} onChange={e=>setCategory(e.target.value)} placeholder="أو اكتب نوع مخصص..." />
+        </Field>
+        <Field label="هل يخصم من الرصيد؟">
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={()=>setAffectsBalance(true)} style={{ flex:1, padding:"10px", borderRadius:10, border:"none", fontWeight:700, cursor:"pointer", background:affectsBalance?COLORS.red:COLORS.bgCard2, color:affectsBalance?"#fff":COLORS.textDim }}>✓ نعم، يخصم</button>
+            <button onClick={()=>setAffectsBalance(false)} style={{ flex:1, padding:"10px", borderRadius:10, border:"none", fontWeight:700, cursor:"pointer", background:!affectsBalance?COLORS.bgCard:COLORS.bgCard2, color:!affectsBalance?COLORS.text:COLORS.textDim, border:`1px solid ${!affectsBalance?COLORS.border:"transparent"}` }}>لا يخصم</button>
+          </div>
         </Field>
         <Field label="ملاحظات (اختياري)"><input style={inputStyle} value={note} onChange={e=>setNote(e.target.value)} placeholder="ملاحظات..." /></Field>
         <SaveBtn disabled={!valid} onClick={save} color={COLORS.red} label={e?"حفظ التعديلات":"حفظ المصروف"} />
@@ -970,8 +998,10 @@ function DebtsScreen({ data, persist, showToast, goTo, rate, onEdit, onPay, onBa
     const remaining=Math.max(0,debt.amount-paid);
     persist(prev=>{
       let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0;
-      if(debt.currency==="usd"){if(debt.direction==="owedToMe")newUSD-=remaining;else newUSD+=remaining;}
-      else{if(debt.direction==="owedToMe")newLBP-=remaining*1000;else newLBP+=remaining*1000;}
+      if(debt.affectsBalance!==false){
+        if(debt.currency==="usd"){if(debt.direction==="owedToMe")newUSD-=remaining;else newUSD+=remaining;}
+        else{if(debt.direction==="owedToMe")newLBP-=remaining*1000;else newLBP+=remaining*1000;}
+      }
       return {...prev,personalDebts:(prev.personalDebts||[]).filter(d=>d.id!==id),balanceUSD:newUSD,balanceLBP:newLBP};
     });
     showToast("تم حذف الدين");
@@ -1015,7 +1045,10 @@ function DebtCard({ debt, onDelete, onEdit, onPay }) {
           <div style={{ width:36, height:36, borderRadius:9, background:color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:800, color:"#fff" }}>{debt.name.slice(0,1)}</div>
           <div>
             <div style={{ fontWeight:700, fontSize:14 }}>{debt.name}</div>
-            <div style={{ fontSize:11, color:COLORS.textFaint }}>{isSettled?"✅ مسدّد":`متبقي: ${isUSD?`$${fmt(remaining)}`:`${fmt(remaining)} ألف ل.ل`}`}</div>
+            <div style={{ fontSize:11, color:COLORS.textFaint }}>
+              {isSettled?"✅ مسدّد":`متبقي: ${isUSD?`$${fmt(remaining)}`:`${fmt(remaining)} ألف ل.ل`}`}
+              {debt.affectsBalance===false && " · لا يؤثر على الرصيد"}
+            </div>
           </div>
         </div>
         <div style={{ fontWeight:800, color, fontSize:15 }}>{isUSD?`$${fmt(debt.amount)}`:`${fmt(debt.amount)} ألف ل.ل`}</div>
@@ -1050,24 +1083,29 @@ function DebtForm({ data, persist, showToast, editing, onBack, rate }) {
   const [name,setName]=useState(e?.name||"");
   const [amount,setAmount]=useState(e?String(e.amount||""):"");
   const [note,setNote]=useState(e?.note||"");
+  const [affectsBalance,setAffectsBalance]=useState(e?.affectsBalance!==false);
   const valid=name.trim()&&parseFloat(amount)>0;
+
   const save=()=>{
     const amt=parseFloat(amount)||0;
-    const debt={id:e?e.id:uid(),currency,direction,name:name.trim(),amount:amt,note:note.trim(),createdAt:e?e.createdAt:Date.now(),payments:e?e.payments:[]};
+    const debt={id:e?e.id:uid(),currency,direction,name:name.trim(),amount:amt,note:note.trim(),createdAt:e?e.createdAt:Date.now(),payments:e?e.payments:[],affectsBalance};
     persist(prev=>{
       let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0;
-      if(e){
+      if(e&&e.affectsBalance!==false){
         const oldPaid=(e.payments||[]).reduce((a,x)=>a+(x.amount||0),0);
         const oldRemaining=Math.max(0,e.amount-oldPaid);
         if(e.currency==="usd"){if(e.direction==="owedToMe")newUSD-=oldRemaining;else newUSD+=oldRemaining;}
         else{if(e.direction==="owedToMe")newLBP-=oldRemaining*1000;else newLBP+=oldRemaining*1000;}
       }
-      if(currency==="usd"){if(direction==="owedToMe")newUSD+=amt;else newUSD-=amt;}
-      else{if(direction==="owedToMe")newLBP+=amt*1000;else newLBP-=amt*1000;}
+      if(affectsBalance){
+        if(currency==="usd"){if(direction==="owedToMe")newUSD+=amt;else newUSD-=amt;}
+        else{if(direction==="owedToMe")newLBP+=amt*1000;else newLBP-=amt*1000;}
+      }
       return {...prev,personalDebts:e?prev.personalDebts.map(d=>d.id===e.id?debt:d):[...(prev.personalDebts||[]),debt],balanceUSD:newUSD,balanceLBP:newLBP};
     });
     showToast(e?"تم تعديل الدين ✓":"تم إضافة الدين ✓"); onBack();
   };
+
   return (
     <div>
       <TopBar title={e?"تعديل الدين":"إضافة دين شخصي"} onBack={onBack} />
@@ -1081,12 +1119,20 @@ function DebtForm({ data, persist, showToast, editing, onBack, rate }) {
         <Field label="العملة"><CurrencyToggle value={currency} onChange={setCurrency} /></Field>
         <Field label="اسم الشخص"><input style={inputStyle} value={name} onChange={e=>setName(e.target.value)} placeholder="مثال: أحمد" autoFocus /></Field>
         <Field label={currency==="usd"?"المبلغ ($)":"المبلغ (ألف ل.ل)"}><AmountInput currency={currency} value={amount} onChange={setAmount} /></Field>
-        <Field label="ملاحظة (اختياري)"><input style={inputStyle} value={note} onChange={e=>setNote(e.target.value)} placeholder="سبب الدين..." /></Field>
-        <div style={{ background:direction==="owedToMe"?`${COLORS.green}10`:`${COLORS.red}10`, border:`1px solid ${direction==="owedToMe"?COLORS.green:COLORS.red}30`, borderRadius:12, padding:12, marginBottom:8 }}>
-          <div style={{ fontSize:12, color:direction==="owedToMe"?COLORS.green:COLORS.red, fontWeight:700 }}>
-            {direction==="owedToMe"?"✓ سيُضاف إلى رصيدك الكلي فوراً":"✓ سيُخصم من رصيدك الكلي فوراً"}
+        <Field label="هل يؤثر على الرصيد الكلي؟">
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={()=>setAffectsBalance(true)} style={{ flex:1, padding:"10px", borderRadius:10, border:"none", fontWeight:700, cursor:"pointer", background:affectsBalance?(direction==="owedToMe"?COLORS.green:COLORS.red):COLORS.bgCard2, color:affectsBalance?"#fff":COLORS.textDim, fontSize:13 }}>
+              {direction==="owedToMe"?"✓ يُضاف للرصيد":"✓ يُخصم من الرصيد"}
+            </button>
+            <button onClick={()=>setAffectsBalance(false)} style={{ flex:1, padding:"10px", borderRadius:10, border:`1px solid ${COLORS.border}`, fontWeight:700, cursor:"pointer", background:!affectsBalance?COLORS.bgCard2:"transparent", color:!affectsBalance?COLORS.text:COLORS.textDim, fontSize:13 }}>
+              📝 تسجيل فقط
+            </button>
           </div>
-        </div>
+          <div style={{ fontSize:11, color:COLORS.textFaint, marginTop:6 }}>
+            {affectsBalance ? (direction==="owedToMe"?"سيُضاف المبلغ لرصيدك فوراً":"سيُخصم المبلغ من رصيدك فوراً") : "يُسجّل فقط بدون تأثير على الرصيد"}
+          </div>
+        </Field>
+        <Field label="ملاحظة (اختياري)"><input style={inputStyle} value={note} onChange={e=>setNote(e.target.value)} placeholder="سبب الدين..." /></Field>
         <SaveBtn disabled={!valid} onClick={save} color={direction==="owedToMe"?COLORS.green:COLORS.red} label={e?"حفظ التعديلات":"إضافة الدين"} />
       </div>
     </div>
@@ -1103,8 +1149,10 @@ function PayDebtScreen({ debt, persist, showToast, onBack }) {
     const amt=parseFloat(amount)||0;
     persist(prev=>{
       let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0;
-      if(debt.direction==="owedToMe"){if(isUSD)newUSD-=amt;else newLBP-=amt*1000;}
-      else{if(isUSD)newUSD+=amt;else newLBP+=amt*1000;}
+      if(debt.affectsBalance!==false){
+        if(debt.direction==="owedToMe"){if(isUSD)newUSD-=amt;else newLBP-=amt*1000;}
+        else{if(isUSD)newUSD+=amt;else newLBP+=amt*1000;}
+      }
       return {...prev,balanceUSD:newUSD,balanceLBP:newLBP,personalDebts:prev.personalDebts.map(d=>d.id===debt.id?{...d,payments:[...(d.payments||[]),{amount:amt,date:Date.now()}]}:d)};
     });
     showToast("تم تسجيل الدفعة ✓"); onBack();
@@ -1211,7 +1259,12 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
         <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
           <div style={{ fontWeight:800, fontSize:14, marginBottom:8 }}>👤 الحساب الحالي</div>
           <div style={{ fontSize:14, color:COLORS.textDim }}>مرحباً: <span style={{ color:COLORS.text, fontWeight:700 }}>{currentUser?.displayName}</span></div>
-          <div style={{ fontSize:12, color:COLORS.textFaint, marginTop:4 }}>اسم المستخدم: {currentUser?.username}</div>
+          <div style={{ fontSize:12, color:COLORS.textFaint, marginTop:4, marginBottom:10 }}>اسم المستخدم: {currentUser?.username}</div>
+          <div style={{ fontSize:11, color:COLORS.textFaint, background:COLORS.bgCard2, padding:"8px 12px", borderRadius:8, lineHeight:1.6 }}>
+            👥 لمشاركة التطبيق مع زوجتك، أرسلي الرابط:{"\n"}
+            <span style={{ color:COLORS.green, fontWeight:700 }}>https://zidanammar7111-cpu.github.io</span>{"\n"}
+            اسم المستخدم: <b>wife</b> · كلمة المرور: <b>1234</b>
+          </div>
         </div>
 
         <button onClick={onLogout} style={{ width:"100%", background:COLORS.red, border:"none", borderRadius:14, padding:"14px", color:"#fff", fontSize:16, fontWeight:800, cursor:"pointer", marginBottom:20 }}>
@@ -1249,4 +1302,4 @@ function ManualBalanceEditor({ data, persist, showToast }) {
       </div>
     </>
   );
-                                                      }
+}
