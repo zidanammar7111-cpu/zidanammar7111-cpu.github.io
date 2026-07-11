@@ -37,6 +37,11 @@ const DAILY_QUOTES = [
   "يوم مثمر يبدأ بتنظيم جيد 🗂️",
 ];
 
+const FIXED_USERS = [
+  { id:"user1", username:"ammar", password:"1234", displayName:"عمار", role:"admin" },
+  { id:"user2", username:"wife", password:"1234", displayName:"زوجتي", role:"user" },
+];
+
 const DEFAULT_DATA = {
   exchangeRate: 89000,
   balanceUSD: 0,
@@ -45,11 +50,7 @@ const DEFAULT_DATA = {
   orders: [],
   expenses: [],
   personalDebts: [],
-  users: [
-    { id: "user1", username: "ammar", password: "1234", displayName: "عمار", role: "admin" },
-    { id: "user2", username: "wife", password: "1234", displayName: "زوجتي", role: "user" },
-  ],
-  lastLoginDate: null,
+  users: FIXED_USERS,
 };
 
 function loadLocal() {
@@ -131,41 +132,23 @@ function AmountInput({ currency, value, onChange, placeholder="0" }) {
   );
 }
 
-function SplashScreen() {
-  return (
-    <div style={{ minHeight:"100vh", background:`linear-gradient(135deg, ${COLORS.bg} 0%, #1a1d27 50%, ${COLORS.bg} 100%)`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:24 }}>
-      <div style={{ width:100, height:100, borderRadius:28, background:`linear-gradient(135deg, ${COLORS.green}, ${COLORS.blue})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:50, boxShadow:`0 20px 60px ${COLORS.green}40` }}>🛵</div>
-      <div style={{ textAlign:"center" }}>
-        <div style={{ fontSize:30, fontWeight:800, color:COLORS.text }}>دليفري بزنس</div>
-        <div style={{ fontSize:14, color:COLORS.textDim, marginTop:6 }}>جارٍ التحميل...</div>
-      </div>
-      <div style={{ display:"flex", gap:8 }}>
-        {[0,1,2].map(i => <div key={i} style={{ width:8, height:8, borderRadius:99, background:i===1?COLORS.green:COLORS.border }} />)}
-      </div>
-    </div>
-  );
-}
-
 function LoginScreen({ onLogin }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   const [biometricAvail, setBiometricAvail] = useState(false);
 
   useEffect(() => {
     if (window.PublicKeyCredential) {
       window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
-        .then(r => setBiometricAvail(r))
-        .catch(() => {});
+        .then(r => setBiometricAvail(r)).catch(() => {});
     }
   }, []);
 
-  const handleLogin = (uname, pass) => {
-    const data = loadLocal();
-    const users = data.users || DEFAULT_DATA.users;
-    const user = users.find(u => u.username === (uname||username) && u.password === (pass||password));
+  const handleLogin = () => {
+    const user = FIXED_USERS.find(u => u.username === username.trim() && u.password === password);
     if (user) {
+      localStorage.setItem("biometric_user", JSON.stringify(user));
       onLogin(user);
     } else {
       setError("اسم المستخدم أو كلمة المرور غير صحيحة");
@@ -174,27 +157,13 @@ function LoginScreen({ onLogin }) {
 
   const handleBiometric = async () => {
     try {
-      setBusy(true);
-      const credential = await navigator.credentials.get({
-        publicKey: {
-          challenge: new Uint8Array(32),
-          timeout: 60000,
-          userVerification: "required",
-        }
-      });
-      if (credential) {
-        const savedUser = localStorage.getItem("biometric_user");
-        if (savedUser) {
-          onLogin(JSON.parse(savedUser));
-        } else {
-          setError("سجّل دخول مرة بكلمة المرور أولاً لتفعيل البصمة");
-        }
+      const savedUser = localStorage.getItem("biometric_user");
+      if (savedUser) {
+        onLogin(JSON.parse(savedUser));
+      } else {
+        setError("سجّل دخول مرة بكلمة المرور أولاً");
       }
-    } catch {
-      setError("فشلت البصمة، ادخل بكلمة المرور");
-    } finally {
-      setBusy(false);
-    }
+    } catch { setError("فشلت البصمة"); }
   };
 
   const today = new Date();
@@ -208,7 +177,6 @@ function LoginScreen({ onLogin }) {
         <div style={{ fontSize:26, fontWeight:800, color:COLORS.text }}>دليفري بزنس</div>
         <div style={{ fontSize:12, color:COLORS.textDim, marginTop:4 }}>{dayNames[today.getDay()]}، {today.getDate()} {monthNames[today.getMonth()]} {today.getFullYear()}</div>
       </div>
-
       <div style={{ width:"100%", maxWidth:380, background:COLORS.bgCard, borderRadius:24, padding:24, border:`1px solid ${COLORS.border}` }}>
         <div style={{ fontSize:16, fontWeight:800, color:COLORS.text, marginBottom:20, textAlign:"center" }}>🔐 تسجيل الدخول</div>
         <Field label="اسم المستخدم">
@@ -218,14 +186,11 @@ function LoginScreen({ onLogin }) {
           <input style={inputStyle} type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="أدخل كلمة المرور" onKeyDown={e=>e.key==="Enter"&&handleLogin()} />
         </Field>
         {error && <div style={{ color:COLORS.red, fontSize:13, marginBottom:10, textAlign:"center", fontWeight:600 }}>{error}</div>}
-        <SaveBtn onClick={()=>handleLogin()} label="دخول" disabled={!username||!password} />
-
+        <SaveBtn onClick={handleLogin} label="دخول" disabled={!username||!password} />
         {biometricAvail && (
           <div style={{ marginTop:16, textAlign:"center" }}>
             <div style={{ fontSize:12, color:COLORS.textFaint, marginBottom:10 }}>أو ادخل ببصمة الإصبع</div>
-            <button onClick={handleBiometric} disabled={busy} style={{ width:60, height:60, borderRadius:99, background:COLORS.bgCard2, border:`2px solid ${COLORS.green}40`, fontSize:28, cursor:"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center" }}>
-              👆
-            </button>
+            <button onClick={handleBiometric} style={{ width:60, height:60, borderRadius:99, background:COLORS.bgCard2, border:`2px solid ${COLORS.green}40`, fontSize:28, cursor:"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center" }}>👆</button>
           </div>
         )}
       </div>
@@ -235,7 +200,6 @@ function LoginScreen({ onLogin }) {
 
 export default function DeliveryApp() {
   const [data, setData] = useState(() => loadLocal());
-  const [splash, setSplash] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
   const [screen, setScreen] = useState("home");
   const [subScreen, setSubScreen] = useState(null);
@@ -245,7 +209,7 @@ export default function DeliveryApp() {
   const [syncing, setSyncing] = useState(false);
   const skipSync = useRef(false);
 
-  // تحميل من السحابة عند البداية
+  // فتح فوري + مزامنة في الخلفية
   useEffect(() => {
     loadFromCloud().then(cloudData => {
       if (cloudData) {
@@ -253,11 +217,10 @@ export default function DeliveryApp() {
         setData(merged);
         saveLocal(merged);
       }
-      setSplash(false);
-    }).catch(() => setSplash(false));
+    }).catch(() => {});
   }, []);
 
-  // مزامنة لحظية من السحابة
+  // مزامنة لحظية
   useEffect(() => {
     const unsub = subscribeToCloud((cloudData) => {
       if (skipSync.current) { skipSync.current = false; return; }
@@ -267,17 +230,6 @@ export default function DeliveryApp() {
     });
     return () => unsub();
   }, []);
-
-  // تحقق من تسجيل الدخول اليومي
-  useEffect(() => {
-    if (!currentUser) return;
-    const today = new Date().toDateString();
-    const data = loadLocal();
-    if (data.lastLoginDate !== today) {
-      // يوم جديد — نحدّث التاريخ
-      persist(prev => ({ ...prev, lastLoginDate: today }));
-    }
-  }, [currentUser]);
 
   const persist = useCallback((updater) => {
     setData((prev) => {
@@ -295,11 +247,6 @@ export default function DeliveryApp() {
     setTimeout(() => setToast(null), 2000);
   };
 
-  const handleLogin = (user) => {
-    localStorage.setItem("biometric_user", JSON.stringify(user));
-    setCurrentUser(user);
-  };
-
   const handleLogout = () => {
     setCurrentUser(null);
     setScreen("home");
@@ -307,18 +254,15 @@ export default function DeliveryApp() {
     setSelectedCompany(null);
   };
 
-  if (splash) return <SplashScreen />;
-  if (!currentUser) return <LoginScreen onLogin={handleLogin} />;
+  if (!currentUser) return <LoginScreen onLogin={setCurrentUser} />;
 
   const rate = data.exchangeRate || 89000;
   const showNav = !subScreen && !selectedCompany && ["home","orders","expenses","settings"].includes(screen);
-
   const goTo = (s, sub=null) => { setScreen(s); setSubScreen(sub); setEditingItem(null); };
 
   let content;
-
   if (selectedCompany) {
-    if (subScreen === "addOrder") {
+    if (subScreen==="addOrder") {
       content = <OrderForm data={data} persist={persist} showToast={showToast} editing={editingItem} company={selectedCompany} currentUser={currentUser} onBack={() => { setSubScreen(null); setEditingItem(null); }} rate={rate} />;
     } else {
       content = <CompanyScreen data={data} persist={persist} showToast={showToast} company={selectedCompany} currentUser={currentUser} onBack={() => { setSelectedCompany(null); setSubScreen(null); }} onAddOrder={() => { setEditingItem(null); setSubScreen("addOrder"); }} onEditOrder={(o) => { setEditingItem(o); setSubScreen("addOrder"); }} rate={rate} />;
@@ -326,7 +270,7 @@ export default function DeliveryApp() {
   } else if (screen==="home") {
     content = <HomeScreen data={data} persist={persist} showToast={showToast} goTo={goTo} rate={rate} onSelectCompany={setSelectedCompany} currentUser={currentUser} />;
   } else if (screen==="orders") {
-    content = <OrdersScreen data={data} persist={persist} showToast={showToast} goTo={goTo} rate={rate} />;
+    content = <OrdersScreen data={data} rate={rate} />;
   } else if (screen==="expenses") {
     if (subScreen==="add"||subScreen==="edit") {
       content = <ExpenseForm data={data} persist={persist} showToast={showToast} editing={editingItem} currentUser={currentUser} onBack={() => { setSubScreen(null); setEditingItem(null); }} rate={rate} />;
@@ -419,7 +363,6 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
   const hour = today.getHours();
   const greeting = hour<12?"صباح الخير ☀️":hour<17?"مساء الخير 🌤️":"مساء النور 🌙";
   const quoteIndex = Math.floor((today.getTime() / 86400000)) % DAILY_QUOTES.length;
-  const todayQuote = DAILY_QUOTES[quoteIndex];
 
   const addCompany = () => {
     if (!newCompanyName.trim()) return;
@@ -430,27 +373,21 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
 
   return (
     <div>
-      {/* Header */}
       <div style={{ background:`linear-gradient(135deg, #1a1d27 0%, #21253a 100%)`, padding:"20px 16px 0" }}>
-        {/* التحية والتاريخ */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
           <div>
             <div style={{ fontSize:13, color:COLORS.textDim, fontWeight:600 }}>{greeting}</div>
-            <div style={{ fontSize:22, fontWeight:800, color:COLORS.text, marginTop:2 }}>{currentUser?.displayName || "عمار"}</div>
-            <div style={{ fontSize:11, color:COLORS.textFaint, marginTop:3 }}>
-              {dayNames[today.getDay()]}، {today.getDate()} {monthNames[today.getMonth()]} {today.getFullYear()}
-            </div>
+            <div style={{ fontSize:22, fontWeight:800, color:COLORS.text, marginTop:2 }}>{currentUser?.displayName||"عمار"}</div>
+            <div style={{ fontSize:11, color:COLORS.textFaint, marginTop:3 }}>{dayNames[today.getDay()]}، {today.getDate()} {monthNames[today.getMonth()]} {today.getFullYear()}</div>
           </div>
           <div style={{ fontSize:40 }}>🛵</div>
         </div>
 
-        {/* عبارة اليوم */}
         <div style={{ background:"rgba(0,200,150,0.08)", border:`1px solid ${COLORS.green}20`, borderRadius:12, padding:"10px 14px", marginBottom:14 }}>
           <div style={{ fontSize:11, color:COLORS.green, fontWeight:700, marginBottom:4 }}>💡 عبارة اليوم</div>
-          <div style={{ fontSize:13, color:COLORS.text, lineHeight:1.5 }}>{todayQuote}</div>
+          <div style={{ fontSize:13, color:COLORS.text, lineHeight:1.5 }}>{DAILY_QUOTES[quoteIndex]}</div>
         </div>
 
-        {/* شريط ملخص سريع */}
         <div style={{ display:"flex", gap:8, marginBottom:16, overflowX:"auto", paddingBottom:4 }}>
           {[
             {icon:"📦",label:"طلبات اليوم",value:`${todayOrders.length}`,color:COLORS.text},
@@ -464,16 +401,8 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
               <div style={{ fontSize:14, fontWeight:800, color:s.color }}>{s.value}</div>
             </div>
           ))}
-          {todayProfitLBP>0 && (
-            <div style={{ flexShrink:0, background:"rgba(79,142,247,0.1)", border:`1px solid ${COLORS.blue}30`, borderRadius:14, padding:"10px 14px", minWidth:100 }}>
-              <div style={{ fontSize:16, marginBottom:4 }}>💵</div>
-              <div style={{ fontSize:10, color:COLORS.textDim, marginBottom:2 }}>أرباح ل.ل</div>
-              <div style={{ fontSize:12, fontWeight:800, color:COLORS.blue }}>{fmtLBP(todayProfitLBP)}</div>
-            </div>
-          )}
         </div>
 
-        {/* الرصيد */}
         <div style={{ display:"flex", gap:10, marginBottom:16 }}>
           <div style={{ flex:1, background:"rgba(0,200,150,0.15)", border:`1px solid ${COLORS.green}40`, borderRadius:16, padding:"14px 12px" }}>
             <div style={{ color:COLORS.green, fontSize:11, fontWeight:700, marginBottom:4 }}>$ بالدولار</div>
@@ -487,7 +416,6 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
       </div>
 
       <div style={{ padding:"16px 16px 0" }}>
-        {/* إحصائيات */}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
           <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:14, padding:"12px 14px" }}>
             <div style={{ fontSize:11, color:COLORS.textDim, marginBottom:4 }}>مترتب للشركات</div>
@@ -499,9 +427,8 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
           </div>
         </div>
 
-        {/* أزرار سريعة */}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
-          <button onClick={()=>setShowQuickOrder(true)} style={{ background:`linear-gradient(135deg, ${COLORS.green}30, ${COLORS.green}10)`, border:`2px solid ${COLORS.green}50`, borderRadius:14, padding:"16px 12px", display:"flex", alignItems:"center", gap:10, cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
+          <button onClick={()=>setShowQuickOrder(true)} style={{ background:`linear-gradient(135deg, ${COLORS.green}30, ${COLORS.green}10)`, border:`2px solid ${COLORS.green}50`, borderRadius:14, padding:"16px 12px", display:"flex", alignItems:"center", gap:10, cursor:"pointer" }}>
             <span style={{ fontSize:24 }}>📦</span>
             <div style={{ textAlign:"right" }}>
               <div style={{ fontSize:14, fontWeight:800, color:COLORS.green }}>طلب سريع</div>
@@ -525,7 +452,6 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
           </button>
         </div>
 
-        {/* الشركات */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
           <div style={{ fontSize:16, fontWeight:800 }}>🏢 الشركات</div>
           <button onClick={()=>setShowAddCompany(true)} style={{ background:`${COLORS.green}20`, border:`1px solid ${COLORS.green}40`, borderRadius:10, padding:"8px 14px", color:COLORS.green, fontWeight:700, fontSize:13, cursor:"pointer" }}>+ إضافة</button>
@@ -538,9 +464,7 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
             </Field>
             <Field label="اللون">
               <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                {COMPANY_COLORS.map(c => (
-                  <button key={c} onClick={()=>setNewCompanyColor(c)} style={{ width:36, height:36, borderRadius:10, background:c, border:newCompanyColor===c?"3px solid #fff":"3px solid transparent", cursor:"pointer" }} />
-                ))}
+                {COMPANY_COLORS.map(c => <button key={c} onClick={()=>setNewCompanyColor(c)} style={{ width:36, height:36, borderRadius:10, background:c, border:newCompanyColor===c?"3px solid #fff":"3px solid transparent", cursor:"pointer" }} />)}
               </div>
             </Field>
             <div style={{ display:"flex", gap:8 }}>
@@ -563,13 +487,10 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
             const companyOrders = (data.orders||[]).filter(o=>o.companyId===company.id);
             const todayCount = companyOrders.filter(o=>new Date(o.createdAt).toDateString()===todayStr).length;
             const totalProfitUSD = companyOrders.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.profit||0),0);
-
             return (
               <div key={company.id} onClick={()=>onSelectCompany(company)} style={{ background:COLORS.bgCard, border:`2px solid ${company.color}40`, borderRadius:18, padding:16, cursor:"pointer" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
-                  <div style={{ width:48, height:48, borderRadius:14, background:company.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, fontWeight:800, color:"#fff", flexShrink:0 }}>
-                    {company.name.slice(0,1)}
-                  </div>
+                  <div style={{ width:48, height:48, borderRadius:14, background:company.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, fontWeight:800, color:"#fff", flexShrink:0 }}>{company.name.slice(0,1)}</div>
                   <div style={{ flex:1 }}>
                     <div style={{ fontWeight:800, fontSize:16 }}>{company.name}</div>
                     <div style={{ fontSize:11, color:COLORS.textFaint, marginTop:2 }}>{todayCount} طلب اليوم · {companyOrders.length} إجمالي</div>
@@ -594,7 +515,6 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
         </div>
       </div>
 
-      {/* نافذة الطلب السريع */}
       {showQuickOrder && (
         <QuickOrderSheet data={data} persist={persist} showToast={showToast} rate={rate} currentUser={currentUser} companies={companies} onClose={()=>setShowQuickOrder(false)} />
       )}
@@ -612,28 +532,15 @@ function QuickOrderSheet({ data, persist, showToast, rate, currentUser, companie
   const [collectedLBP, setCollectedLBP] = useState("");
   const [orderNumber, setOrderNumber] = useState("");
 
-  const ov=parseFloat(orderValue)||0;
-  const pr=parseFloat(profit)||0;
+  const ov=parseFloat(orderValue)||0, pr=parseFloat(profit)||0;
   const dueToCompany=Math.max(0,ov-pr);
-  const colUSD=parseFloat(collectedUSD)||0;
-  const colLBP=parseFloat(collectedLBP)||0;
+  const colUSD=parseFloat(collectedUSD)||0, colLBP=parseFloat(collectedLBP)||0;
   const totalColUSD=colUSD+(colLBP*1000/rate);
   const tips=Math.max(0,totalColUSD-dueToCompany-pr);
 
   const save=()=>{
-    const order={
-      id:uid(), currency, companyId:selectedCompany.id, companyName:selectedCompany.name,
-      orderNumber:orderNumber.trim(), orderValue:ov, profit:pr, dueToCompany,
-      collectedUSD:colUSD, collectedLBP:colLBP, tips, note:"",
-      createdAt:Date.now(), settled:false, byName:currentUser?.displayName||"",
-    };
-    persist(prev=>{
-      let newUSD=prev.balanceUSD||0;
-      let newLBP=prev.balanceLBP||0;
-      newUSD+=colUSD;
-      newLBP+=colLBP*1000;
-      return {...prev, orders:[...(prev.orders||[]),order], balanceUSD:newUSD, balanceLBP:newLBP};
-    });
+    const order={ id:uid(), currency, companyId:selectedCompany.id, companyName:selectedCompany.name, orderNumber:orderNumber.trim(), orderValue:ov, profit:pr, dueToCompany, collectedUSD:colUSD, collectedLBP:colLBP, tips, note:"", createdAt:Date.now(), settled:false, byName:currentUser?.displayName||"" };
+    persist(prev=>{ let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0; newUSD+=colUSD; newLBP+=colLBP*1000; return {...prev,orders:[...(prev.orders||[]),order],balanceUSD:newUSD,balanceLBP:newLBP}; });
     showToast("تم حفظ الطلب ✓");
     onClose();
   };
@@ -643,7 +550,6 @@ function QuickOrderSheet({ data, persist, showToast, rate, currentUser, companie
       <div onClick={e=>e.stopPropagation()} style={{ width:"100%", background:COLORS.bgCard, borderRadius:"20px 20px 0 0", padding:"18px 16px calc(24px + env(safe-area-inset-bottom))", maxHeight:"85vh", overflowY:"auto" }}>
         <div style={{ width:40, height:4, background:COLORS.border, borderRadius:99, margin:"0 auto 16px" }} />
         <div style={{ fontSize:16, fontWeight:800, marginBottom:16, textAlign:"center" }}>📦 طلب سريع</div>
-
         {step==="company" && (
           <>
             <div style={{ fontSize:13, color:COLORS.textDim, marginBottom:10 }}>اختر الشركة:</div>
@@ -657,7 +563,6 @@ function QuickOrderSheet({ data, persist, showToast, rate, currentUser, companie
             </div>
           </>
         )}
-
         {step==="order" && (
           <>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16, background:COLORS.bgCard2, borderRadius:12, padding:10 }}>
@@ -665,7 +570,6 @@ function QuickOrderSheet({ data, persist, showToast, rate, currentUser, companie
               <div style={{ width:32, height:32, borderRadius:8, background:selectedCompany?.color, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, color:"#fff", fontSize:14 }}>{selectedCompany?.name.slice(0,1)}</div>
               <div style={{ fontWeight:800 }}>{selectedCompany?.name}</div>
             </div>
-
             <div style={{ background:COLORS.bgCard2, borderRadius:14, padding:14, marginBottom:14 }}>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
                 {[
@@ -680,17 +584,10 @@ function QuickOrderSheet({ data, persist, showToast, rate, currentUser, companie
                 ))}
               </div>
             </div>
-
             <Field label="العملة"><CurrencyToggle value={currency} onChange={setCurrency} /></Field>
-            <Field label="رقم الطلب (اختياري)">
-              <input style={inputStyle} value={orderNumber} onChange={e=>setOrderNumber(e.target.value)} placeholder="#1258" />
-            </Field>
-            <Field label={currency==="usd"?"قيمة الطلب ($)":"قيمة الطلب (ألف ل.ل)"}>
-              <AmountInput currency={currency} value={orderValue} onChange={setOrderValue} />
-            </Field>
-            <Field label={currency==="usd"?"ربحك ($)":"ربحك (ألف ل.ل)"}>
-              <AmountInput currency={currency} value={profit} onChange={setProfit} />
-            </Field>
+            <Field label="رقم الطلب (اختياري)"><input style={inputStyle} value={orderNumber} onChange={e=>setOrderNumber(e.target.value)} placeholder="#1258" /></Field>
+            <Field label={currency==="usd"?"قيمة الطلب ($)":"قيمة الطلب (ألف ل.ل)"}><AmountInput currency={currency} value={orderValue} onChange={setOrderValue} /></Field>
+            <Field label={currency==="usd"?"ربحك ($)":"ربحك (ألف ل.ل)"}><AmountInput currency={currency} value={profit} onChange={setProfit} /></Field>
             <div style={{ fontSize:13, color:COLORS.textDim, marginBottom:8, fontWeight:600 }}>المقبوض من الزبون</div>
             <div style={{ display:"flex", gap:10, marginBottom:14 }}>
               <div style={{ flex:1 }}>
@@ -724,63 +621,33 @@ function CompanyScreen({ data, persist, showToast, company, currentUser, onBack,
   const totalTipsUSD = companyOrders.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.tips||0),0);
 
   const deleteCompany = () => {
-    persist(prev => ({
-      ...prev,
-      companies: (prev.companies||[]).filter(c=>c.id!==company.id),
-      orders: (prev.orders||[]).filter(o=>o.companyId!==company.id),
-    }));
-    showToast("تم حذف الشركة");
-    onBack();
+    persist(prev=>({...prev,companies:(prev.companies||[]).filter(c=>c.id!==company.id),orders:(prev.orders||[]).filter(o=>o.companyId!==company.id)}));
+    showToast("تم حذف الشركة"); onBack();
   };
 
   const settleCompany = () => {
-    persist(prev => {
-      let newUSD = prev.balanceUSD||0;
-      let newLBP = prev.balanceLBP||0;
-      newUSD -= dueUSD;
-      newLBP -= dueLBP;
-      return {
-        ...prev, balanceUSD:newUSD, balanceLBP:newLBP,
-        orders: (prev.orders||[]).map(o => o.companyId===company.id&&!o.settled ? {...o,settled:true} : o)
-      };
-    });
-    showToast("تم تسديد حساب الشركة ✓");
-    setShowSettle(false);
+    persist(prev=>({...prev,balanceUSD:(prev.balanceUSD||0)-dueUSD,balanceLBP:(prev.balanceLBP||0)-dueLBP,orders:(prev.orders||[]).map(o=>o.companyId===company.id&&!o.settled?{...o,settled:true}:o)}));
+    showToast("تم تسديد حساب الشركة ✓"); setShowSettle(false);
   };
 
   const deleteOrder = (id) => {
-    const order = companyOrders.find(o=>o.id===id);
-    if (!order) return;
-    persist(prev => {
-      let newUSD = prev.balanceUSD||0;
-      let newLBP = prev.balanceLBP||0;
-      newUSD -= order.collectedUSD||0;
-      newLBP -= (order.collectedLBP||0)*1000;
-      return { ...prev, orders:prev.orders.filter(o=>o.id!==id), balanceUSD:newUSD, balanceLBP:newLBP };
-    });
+    const order=companyOrders.find(o=>o.id===id);
+    if(!order) return;
+    persist(prev=>({...prev,orders:prev.orders.filter(o=>o.id!==id),balanceUSD:(prev.balanceUSD||0)-(order.collectedUSD||0),balanceLBP:(prev.balanceLBP||0)-(order.collectedLBP||0)*1000}));
     showToast("تم حذف الطلب");
   };
 
   return (
     <div>
-      <TopBar title={company.name} onBack={onBack} right={
-        <button onClick={deleteCompany} style={{ background:"none", border:"none", color:COLORS.red, cursor:"pointer", fontSize:12, fontWeight:700 }}>حذف</button>
-      } />
+      <TopBar title={company.name} onBack={onBack} right={<button onClick={deleteCompany} style={{ background:"none", border:"none", color:COLORS.red, cursor:"pointer", fontSize:12, fontWeight:700 }}>حذف</button>} />
       <div style={{ padding:"0 16px" }}>
         <div style={{ background:`linear-gradient(135deg, ${company.color}20, ${company.color}10)`, border:`1px solid ${company.color}40`, borderRadius:18, padding:18, marginBottom:16 }}>
           <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:14 }}>
             <div style={{ width:52, height:52, borderRadius:14, background:company.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, fontWeight:800, color:"#fff" }}>{company.name.slice(0,1)}</div>
-            <div>
-              <div style={{ fontSize:18, fontWeight:800 }}>{company.name}</div>
-              <div style={{ fontSize:12, color:COLORS.textFaint }}>{companyOrders.length} طلب إجمالي</div>
-            </div>
+            <div><div style={{ fontSize:18, fontWeight:800 }}>{company.name}</div><div style={{ fontSize:12, color:COLORS.textFaint }}>{companyOrders.length} طلب إجمالي</div></div>
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
-            {[
-              {label:"الأرباح",value:`$${fmt(totalProfitUSD)}`,color:COLORS.green},
-              {label:"مترتب",value:`$${fmt(dueUSD)}`,color:COLORS.orange},
-              {label:"التيبس",value:`$${fmt(totalTipsUSD)}`,color:COLORS.purple},
-            ].map((s,i)=>(
+            {[{label:"الأرباح",value:`$${fmt(totalProfitUSD)}`,color:COLORS.green},{label:"مترتب",value:`$${fmt(dueUSD)}`,color:COLORS.orange},{label:"التيبس",value:`$${fmt(totalTipsUSD)}`,color:COLORS.purple}].map((s,i)=>(
               <div key={i} style={{ background:"rgba(0,0,0,0.2)", borderRadius:12, padding:"10px 8px", textAlign:"center" }}>
                 <div style={{ fontSize:10, color:COLORS.textDim, marginBottom:2 }}>{s.label}</div>
                 <div style={{ fontSize:15, fontWeight:800, color:s.color }}>{s.value}</div>
@@ -792,7 +659,7 @@ function CompanyScreen({ data, persist, showToast, company, currentUser, onBack,
         {(dueUSD>0||dueLBP>0) && (
           <div style={{ marginBottom:16 }}>
             {!showSettle ? (
-              <button onClick={()=>setShowSettle(true)} style={{ width:"100%", background:`linear-gradient(135deg, ${COLORS.orange}, #ff6b35)`, border:"none", borderRadius:14, padding:"16px", color:"#fff", fontSize:16, fontWeight:800, cursor:"pointer", boxShadow:`0 8px 24px ${COLORS.orange}40` }}>
+              <button onClick={()=>setShowSettle(true)} style={{ width:"100%", background:`linear-gradient(135deg, ${COLORS.orange}, #ff6b35)`, border:"none", borderRadius:14, padding:"16px", color:"#fff", fontSize:16, fontWeight:800, cursor:"pointer" }}>
                 💰 تسديد للشركة — ${fmt(dueUSD)} {dueLBP>0?`+ ${fmtLBP(dueLBP)} ل.ل`:""}
               </button>
             ) : (
@@ -815,9 +682,7 @@ function CompanyScreen({ data, persist, showToast, company, currentUser, onBack,
         <div style={{ fontSize:15, fontWeight:800, marginBottom:12 }}>سجل الطلبات ({companyOrders.length})</div>
         {companyOrders.length===0 && <div style={{ textAlign:"center", color:COLORS.textFaint, padding:"30px 0" }}>لا توجد طلبات بعد</div>}
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {companyOrders.map(order => (
-            <OrderCard key={order.id} order={order} onDelete={()=>deleteOrder(order.id)} onEdit={()=>onEditOrder(order)} />
-          ))}
+          {companyOrders.map(order=><OrderCard key={order.id} order={order} onDelete={()=>deleteOrder(order.id)} onEdit={()=>onEditOrder(order)} />)}
         </div>
       </div>
     </div>
@@ -874,34 +739,21 @@ function OrderForm({ data, persist, showToast, editing, company, currentUser, on
   const [collectedLBP,setCollectedLBP]=useState(e?String(e.collectedLBP||""):"");
   const [note,setNote]=useState(e?.note||"");
 
-  const ov=parseFloat(orderValue)||0;
-  const pr=parseFloat(profit)||0;
+  const ov=parseFloat(orderValue)||0, pr=parseFloat(profit)||0;
   const dueToCompany=Math.max(0,ov-pr);
-  const colUSD=parseFloat(collectedUSD)||0;
-  const colLBP=parseFloat(collectedLBP)||0;
+  const colUSD=parseFloat(collectedUSD)||0, colLBP=parseFloat(collectedLBP)||0;
   const totalColUSD=colUSD+(colLBP*1000/rate);
   const tips=Math.max(0,totalColUSD-dueToCompany-pr);
 
   const save=()=>{
-    const order={
-      id:e?e.id:uid(), currency,
-      companyId:company?company.id:e?.companyId,
-      companyName:company?company.name:e?.companyName,
-      orderNumber:orderNumber.trim(), orderValue:ov, profit:pr,
-      dueToCompany, collectedUSD:colUSD, collectedLBP:colLBP,
-      tips, note:note.trim(), createdAt:e?e.createdAt:Date.now(),
-      settled:e?e.settled:false, byName:currentUser?.displayName||"",
-    };
+    const order={ id:e?e.id:uid(), currency, companyId:company?company.id:e?.companyId, companyName:company?company.name:e?.companyName, orderNumber:orderNumber.trim(), orderValue:ov, profit:pr, dueToCompany, collectedUSD:colUSD, collectedLBP:colLBP, tips, note:note.trim(), createdAt:e?e.createdAt:Date.now(), settled:e?e.settled:false, byName:currentUser?.displayName||"" };
     persist(prev=>{
-      let newUSD=prev.balanceUSD||0;
-      let newLBP=prev.balanceLBP||0;
+      let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0;
       if(e){ newUSD-=e.collectedUSD||0; newLBP-=(e.collectedLBP||0)*1000; }
       newUSD+=colUSD; newLBP+=colLBP*1000;
-      const orders=e?prev.orders.map(o=>o.id===e.id?order:o):[...(prev.orders||[]),order];
-      return {...prev, orders, balanceUSD:newUSD, balanceLBP:newLBP};
+      return {...prev,orders:e?prev.orders.map(o=>o.id===e.id?order:o):[...(prev.orders||[]),order],balanceUSD:newUSD,balanceLBP:newLBP};
     });
-    showToast(e?"تم تعديل الطلب ✓":"تم حفظ الطلب ✓");
-    onBack();
+    showToast(e?"تم تعديل الطلب ✓":"تم حفظ الطلب ✓"); onBack();
   };
 
   return (
@@ -911,11 +763,7 @@ function OrderForm({ data, persist, showToast, editing, company, currentUser, on
         <Field label="عملة الطلب"><CurrencyToggle value={currency} onChange={setCurrency} /></Field>
         <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:14, marginBottom:16 }}>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
-            {[
-              {label:"مترتب",value:currency==="usd"?`$${fmt(dueToCompany)}`:`${fmt(dueToCompany)} ألف`,color:COLORS.orange},
-              {label:"ربح",value:currency==="usd"?`$${fmt(pr)}`:`${fmt(pr)} ألف`,color:COLORS.green},
-              {label:"تيبس",value:`$${fmt(tips)}`,color:COLORS.purple},
-            ].map((s,i)=>(
+            {[{label:"مترتب",value:currency==="usd"?`$${fmt(dueToCompany)}`:`${fmt(dueToCompany)} ألف`,color:COLORS.orange},{label:"ربح",value:currency==="usd"?`$${fmt(pr)}`:`${fmt(pr)} ألف`,color:COLORS.green},{label:"تيبس",value:`$${fmt(tips)}`,color:COLORS.purple}].map((s,i)=>(
               <div key={i} style={{ textAlign:"center", background:`${s.color}15`, borderRadius:10, padding:10 }}>
                 <div style={{ fontSize:10, color:COLORS.textDim, marginBottom:4 }}>{s.label}</div>
                 <div style={{ fontSize:15, fontWeight:800, color:s.color }}>{s.value}</div>
@@ -951,7 +799,7 @@ function OrderForm({ data, persist, showToast, editing, company, currentUser, on
   );
 }
 
-function OrdersScreen({ data, persist, showToast, goTo, rate }) {
+function OrdersScreen({ data, rate }) {
   const [filter,setFilter]=useState("all");
   const orders=data.orders||[];
   const filtered=useMemo(()=>{
@@ -963,11 +811,9 @@ function OrdersScreen({ data, persist, showToast, goTo, rate }) {
     if(filter==="month") return orders.filter(o=>o.createdAt>=month.getTime());
     return orders;
   },[orders,filter]);
-
   const totalProfitUSD=filtered.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.profit||0),0);
   const totalDueUSD=filtered.filter(o=>o.currency==="usd"&&!o.settled).reduce((s,o)=>s+(o.dueToCompany||0),0);
   const totalTipsUSD=filtered.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.tips||0),0);
-
   return (
     <div>
       <TopBar title="كل الطلبات" />
@@ -979,11 +825,7 @@ function OrdersScreen({ data, persist, showToast, goTo, rate }) {
         </div>
         <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:14, marginBottom:16 }}>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
-            {[
-              {label:"الأرباح",value:`$${fmt(totalProfitUSD)}`,color:COLORS.green},
-              {label:"مترتب",value:`$${fmt(totalDueUSD)}`,color:COLORS.orange},
-              {label:"التيبس",value:`$${fmt(totalTipsUSD)}`,color:COLORS.purple},
-            ].map((s,i)=>(
+            {[{label:"الأرباح",value:`$${fmt(totalProfitUSD)}`,color:COLORS.green},{label:"مترتب",value:`$${fmt(totalDueUSD)}`,color:COLORS.orange},{label:"التيبس",value:`$${fmt(totalTipsUSD)}`,color:COLORS.purple}].map((s,i)=>(
               <div key={i} style={{ textAlign:"center", background:COLORS.bgCard2, borderRadius:10, padding:10 }}>
                 <div style={{ fontSize:10, color:COLORS.textDim, marginBottom:4 }}>{s.label}</div>
                 <div style={{ fontSize:15, fontWeight:800, color:s.color }}>{s.value}</div>
@@ -991,11 +833,9 @@ function OrdersScreen({ data, persist, showToast, goTo, rate }) {
             ))}
           </div>
         </div>
-        {filtered.length===0 && <div style={{ textAlign:"center", color:COLORS.textFaint, padding:"40px 0" }}>لا توجد طلبات</div>}
+        {filtered.length===0&&<div style={{ textAlign:"center", color:COLORS.textFaint, padding:"40px 0" }}>لا توجد طلبات</div>}
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {[...filtered].sort((a,b)=>b.createdAt-a.createdAt).map(order=>(
-            <OrderCard key={order.id} order={order} onDelete={()=>{}} onEdit={()=>{}} />
-          ))}
+          {[...filtered].sort((a,b)=>b.createdAt-a.createdAt).map(order=><OrderCard key={order.id} order={order} onDelete={()=>{}} onEdit={()=>{}} />)}
         </div>
       </div>
     </div>
@@ -1014,21 +854,14 @@ function ExpensesScreen({ data, persist, showToast, goTo, rate, onEdit }) {
     if(filter==="month") return expenses.filter(e=>e.createdAt>=month.getTime());
     return expenses;
   },[expenses,filter]);
-
   const totalUSD=filtered.filter(e=>e.currency==="usd").reduce((s,e)=>s+(e.amount||0),0);
   const totalLBP=filtered.filter(e=>e.currency==="lbp").reduce((s,e)=>s+(e.amount||0)*1000,0);
-
   const deleteExpense=(id)=>{
     const exp=expenses.find(e=>e.id===id);
     if(!exp) return;
-    persist(prev=>{
-      const newUSD=exp.currency==="usd"?(prev.balanceUSD||0)+(exp.amount||0):prev.balanceUSD||0;
-      const newLBP=exp.currency==="lbp"?(prev.balanceLBP||0)+(exp.amount||0)*1000:prev.balanceLBP||0;
-      return {...prev, expenses:prev.expenses.filter(e=>e.id!==id), balanceUSD:newUSD, balanceLBP:newLBP};
-    });
+    persist(prev=>({...prev,expenses:prev.expenses.filter(e=>e.id!==id),balanceUSD:exp.currency==="usd"?(prev.balanceUSD||0)+(exp.amount||0):prev.balanceUSD||0,balanceLBP:exp.currency==="lbp"?(prev.balanceLBP||0)+(exp.amount||0)*1000:prev.balanceLBP||0}));
     showToast("تم حذف المصروف");
   };
-
   return (
     <div>
       <TopBar title="المصروفات" right={<button onClick={()=>goTo("expenses","add")} style={{ background:COLORS.red, border:"none", borderRadius:10, padding:"8px 12px", color:"#fff", fontWeight:700, cursor:"pointer", fontSize:13 }}>+ جديد</button>} />
@@ -1042,15 +875,13 @@ function ExpensesScreen({ data, persist, showToast, goTo, rate, onEdit }) {
           <div>
             <div style={{ fontSize:12, color:COLORS.textDim, marginBottom:4 }}>إجمالي المصروفات</div>
             <div style={{ fontSize:22, fontWeight:800, color:COLORS.red }}>${fmt(totalUSD)}</div>
-            {totalLBP>0 && <div style={{ fontSize:13, color:COLORS.blue, marginTop:2 }}>{fmtLBP(totalLBP)} ل.ل</div>}
+            {totalLBP>0&&<div style={{ fontSize:13, color:COLORS.blue, marginTop:2 }}>{fmtLBP(totalLBP)} ل.ل</div>}
           </div>
           <div style={{ fontSize:36 }}>💸</div>
         </div>
-        {filtered.length===0 && <div style={{ textAlign:"center", color:COLORS.textFaint, padding:"40px 0" }}>لا توجد مصروفات</div>}
+        {filtered.length===0&&<div style={{ textAlign:"center", color:COLORS.textFaint, padding:"40px 0" }}>لا توجد مصروفات</div>}
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {[...filtered].sort((a,b)=>b.createdAt-a.createdAt).map(exp=>(
-            <ExpenseCard key={exp.id} expense={exp} onDelete={()=>deleteExpense(exp.id)} onEdit={()=>onEdit(exp)} />
-          ))}
+          {[...filtered].sort((a,b)=>b.createdAt-a.createdAt).map(exp=><ExpenseCard key={exp.id} expense={exp} onDelete={()=>deleteExpense(exp.id)} onEdit={()=>onEdit(exp)} />)}
         </div>
       </div>
     </div>
@@ -1073,11 +904,11 @@ function ExpenseCard({ expense, onDelete, onEdit }) {
         </div>
         <div style={{ fontWeight:800, color:COLORS.red, fontSize:15 }}>{isUSD?`-$${fmt(expense.amount)}`:`-${fmt(expense.amount)} ألف ل.ل`}</div>
       </div>
-      {open && (
+      {open&&(
         <div style={{ borderTop:`1px solid ${COLORS.border}`, padding:"12px 14px", display:"flex", flexDirection:"column", gap:6 }}>
           <Row label="النوع" value={expense.category||""} />
           <Row label="المبلغ" value={isUSD?`$${fmt(expense.amount)}`:`${fmt(expense.amount)} ألف ل.ل`} valueColor={COLORS.red} />
-          {expense.note && <Row label="ملاحظات" value={expense.note} />}
+          {expense.note&&<Row label="ملاحظات" value={expense.note} />}
           <div style={{ display:"flex", gap:10, marginTop:6 }}>
             <button onClick={onEdit} style={{ background:"none", border:"none", color:COLORS.blue, fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}><Edit3 size={14}/> تعديل</button>
             <button onClick={onDelete} style={{ background:"none", border:"none", color:COLORS.red, fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}><Trash2 size={14}/> حذف</button>
@@ -1096,26 +927,17 @@ function ExpenseForm({ data, persist, showToast, editing, currentUser, onBack, r
   const [note,setNote]=useState(e?.note||"");
   const categories=["بنزين","أكل","صيانة","إنترنت","كهرباء","إيجار","أخرى"];
   const valid=parseFloat(amount)>0;
-
   const save=()=>{
     const amt=parseFloat(amount)||0;
-    const expense={id:e?e.id:uid(), currency, amount:amt, category:category.trim(), note:note.trim(), createdAt:e?e.createdAt:Date.now(), byName:currentUser?.displayName||""};
+    const expense={id:e?e.id:uid(),currency,amount:amt,category:category.trim(),note:note.trim(),createdAt:e?e.createdAt:Date.now(),byName:currentUser?.displayName||""};
     persist(prev=>{
-      let newUSD=prev.balanceUSD||0;
-      let newLBP=prev.balanceLBP||0;
-      if(e){
-        if(e.currency==="usd") newUSD+=e.amount||0;
-        else newLBP+=(e.amount||0)*1000;
-      }
-      if(currency==="usd") newUSD-=amt;
-      else newLBP-=amt*1000;
-      const expenses=e?prev.expenses.map(ex=>ex.id===e.id?expense:ex):[...(prev.expenses||[]),expense];
-      return {...prev, expenses, balanceUSD:newUSD, balanceLBP:newLBP};
+      let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0;
+      if(e){ if(e.currency==="usd")newUSD+=e.amount||0; else newLBP+=(e.amount||0)*1000; }
+      if(currency==="usd")newUSD-=amt; else newLBP-=amt*1000;
+      return {...prev,expenses:e?prev.expenses.map(ex=>ex.id===e.id?expense:ex):[...(prev.expenses||[]),expense],balanceUSD:newUSD,balanceLBP:newLBP};
     });
-    showToast(e?"تم تعديل المصروف ✓":"تم حفظ المصروف ✓");
-    onBack();
+    showToast(e?"تم تعديل المصروف ✓":"تم حفظ المصروف ✓"); onBack();
   };
-
   return (
     <div>
       <TopBar title={e?"تعديل المصروف":"إضافة مصروف"} onBack={onBack} />
@@ -1124,9 +946,7 @@ function ExpenseForm({ data, persist, showToast, editing, currentUser, onBack, r
         <Field label={currency==="usd"?"المبلغ ($)":"المبلغ (ألف ل.ل)"}><AmountInput currency={currency} value={amount} onChange={setAmount} /></Field>
         <Field label="النوع / الفئة">
           <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:8 }}>
-            {categories.map(c=>(
-              <button key={c} onClick={()=>setCategory(c)} style={{ padding:"8px 14px", borderRadius:20, border:`1px solid ${category===c?COLORS.red:COLORS.border}`, background:category===c?`${COLORS.red}20`:"transparent", color:category===c?COLORS.red:COLORS.textDim, fontWeight:600, fontSize:13, cursor:"pointer" }}>{c}</button>
-            ))}
+            {categories.map(c=><button key={c} onClick={()=>setCategory(c)} style={{ padding:"8px 14px", borderRadius:20, border:`1px solid ${category===c?COLORS.red:COLORS.border}`, background:category===c?`${COLORS.red}20`:"transparent", color:category===c?COLORS.red:COLORS.textDim, fontWeight:600, fontSize:13, cursor:"pointer" }}>{c}</button>)}
           </div>
           <input style={inputStyle} value={category} onChange={e=>setCategory(e.target.value)} placeholder="أو اكتب نوع مخصص..." />
         </Field>
@@ -1143,22 +963,19 @@ function DebtsScreen({ data, persist, showToast, goTo, rate, onEdit, onPay, onBa
   const owedByMe=debts.filter(d=>d.direction==="owedByMe");
   const totalOwedToMeUSD=owedToMe.filter(d=>d.currency==="usd").reduce((s,d)=>{const p=(d.payments||[]).reduce((a,x)=>a+(x.amount||0),0);return s+Math.max(0,d.amount-p);},0);
   const totalOwedByMeUSD=owedByMe.filter(d=>d.currency==="usd").reduce((s,d)=>{const p=(d.payments||[]).reduce((a,x)=>a+(x.amount||0),0);return s+Math.max(0,d.amount-p);},0);
-
   const deleteDebt=(id)=>{
     const debt=(data.personalDebts||[]).find(d=>d.id===id);
     if(!debt) return;
+    const paid=(debt.payments||[]).reduce((a,x)=>a+(x.amount||0),0);
+    const remaining=Math.max(0,debt.amount-paid);
     persist(prev=>{
-      let newUSD=prev.balanceUSD||0;
-      let newLBP=prev.balanceLBP||0;
-      const paid=(debt.payments||[]).reduce((a,x)=>a+(x.amount||0),0);
-      const remaining=Math.max(0,debt.amount-paid);
+      let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0;
       if(debt.currency==="usd"){if(debt.direction==="owedToMe")newUSD-=remaining;else newUSD+=remaining;}
       else{if(debt.direction==="owedToMe")newLBP-=remaining*1000;else newLBP+=remaining*1000;}
       return {...prev,personalDebts:(prev.personalDebts||[]).filter(d=>d.id!==id),balanceUSD:newUSD,balanceLBP:newLBP};
     });
     showToast("تم حذف الدين");
   };
-
   return (
     <div>
       <TopBar title="الديون الشخصية" onBack={onBack} right={<button onClick={()=>goTo("debts","add")} style={{ background:COLORS.orange, border:"none", borderRadius:10, padding:"8px 12px", color:"#fff", fontWeight:700, cursor:"pointer", fontSize:13 }}>+ جديد</button>} />
@@ -1212,12 +1029,7 @@ function DebtCard({ debt, onDelete, onEdit, onPay }) {
           {(debt.payments||[]).length>0&&(
             <div style={{ marginTop:6 }}>
               <div style={{ fontSize:12, fontWeight:700, color:COLORS.textDim, marginBottom:4 }}>الدفعات:</div>
-              {debt.payments.map((p,i)=>(
-                <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"2px 0" }}>
-                  <span style={{ color:COLORS.textFaint }}>{new Date(p.date).toLocaleDateString("ar-LB")}</span>
-                  <span style={{ color:COLORS.green, fontWeight:700 }}>{isUSD?`$${fmt(p.amount)}`:`${fmt(p.amount)} ألف ل.ل`}</span>
-                </div>
-              ))}
+              {debt.payments.map((p,i)=><div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"2px 0" }}><span style={{ color:COLORS.textFaint }}>{new Date(p.date).toLocaleDateString("ar-LB")}</span><span style={{ color:COLORS.green, fontWeight:700 }}>{isUSD?`$${fmt(p.amount)}`:`${fmt(p.amount)} ألف ل.ل`}</span></div>)}
             </div>
           )}
           <div style={{ display:"flex", gap:10, marginTop:8 }}>
@@ -1239,13 +1051,11 @@ function DebtForm({ data, persist, showToast, editing, onBack, rate }) {
   const [amount,setAmount]=useState(e?String(e.amount||""):"");
   const [note,setNote]=useState(e?.note||"");
   const valid=name.trim()&&parseFloat(amount)>0;
-
   const save=()=>{
     const amt=parseFloat(amount)||0;
     const debt={id:e?e.id:uid(),currency,direction,name:name.trim(),amount:amt,note:note.trim(),createdAt:e?e.createdAt:Date.now(),payments:e?e.payments:[]};
     persist(prev=>{
-      let newUSD=prev.balanceUSD||0;
-      let newLBP=prev.balanceLBP||0;
+      let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0;
       if(e){
         const oldPaid=(e.payments||[]).reduce((a,x)=>a+(x.amount||0),0);
         const oldRemaining=Math.max(0,e.amount-oldPaid);
@@ -1254,13 +1064,10 @@ function DebtForm({ data, persist, showToast, editing, onBack, rate }) {
       }
       if(currency==="usd"){if(direction==="owedToMe")newUSD+=amt;else newUSD-=amt;}
       else{if(direction==="owedToMe")newLBP+=amt*1000;else newLBP-=amt*1000;}
-      const personalDebts=e?prev.personalDebts.map(d=>d.id===e.id?debt:d):[...(prev.personalDebts||[]),debt];
-      return {...prev,personalDebts,balanceUSD:newUSD,balanceLBP:newLBP};
+      return {...prev,personalDebts:e?prev.personalDebts.map(d=>d.id===e.id?debt:d):[...(prev.personalDebts||[]),debt],balanceUSD:newUSD,balanceLBP:newLBP};
     });
-    showToast(e?"تم تعديل الدين ✓":"تم إضافة الدين ✓");
-    onBack();
+    showToast(e?"تم تعديل الدين ✓":"تم إضافة الدين ✓"); onBack();
   };
-
   return (
     <div>
       <TopBar title={e?"تعديل الدين":"إضافة دين شخصي"} onBack={onBack} />
@@ -1292,23 +1099,16 @@ function PayDebtScreen({ debt, persist, showToast, onBack }) {
   const paid=(debt.payments||[]).reduce((s,p)=>s+(p.amount||0),0);
   const remaining=Math.max(0,debt.amount-paid);
   const valid=parseFloat(amount)>0&&parseFloat(amount)<=remaining;
-
   const save=()=>{
     const amt=parseFloat(amount)||0;
     persist(prev=>{
-      let newUSD=prev.balanceUSD||0;
-      let newLBP=prev.balanceLBP||0;
+      let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0;
       if(debt.direction==="owedToMe"){if(isUSD)newUSD-=amt;else newLBP-=amt*1000;}
       else{if(isUSD)newUSD+=amt;else newLBP+=amt*1000;}
-      return {
-        ...prev,balanceUSD:newUSD,balanceLBP:newLBP,
-        personalDebts:prev.personalDebts.map(d=>d.id===debt.id?{...d,payments:[...(d.payments||[]),{amount:amt,date:Date.now()}]}:d)
-      };
+      return {...prev,balanceUSD:newUSD,balanceLBP:newLBP,personalDebts:prev.personalDebts.map(d=>d.id===debt.id?{...d,payments:[...(d.payments||[]),{amount:amt,date:Date.now()}]}:d)};
     });
-    showToast("تم تسجيل الدفعة ✓");
-    onBack();
+    showToast("تم تسجيل الدفعة ✓"); onBack();
   };
-
   return (
     <div>
       <TopBar title={`تسديد — ${debt.name}`} onBack={onBack} />
@@ -1333,43 +1133,20 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
   const [showConvert,setShowConvert]=useState(false);
   const [convertAmount,setConvertAmount]=useState("");
   const [convertDir,setConvertDir]=useState("usd_to_lbp");
-  const [editingUsers,setEditingUsers]=useState(false);
-  const [users,setUsers]=useState(data.users||DEFAULT_DATA.users);
 
-  const saveRate=()=>{
-    const r=parseFloat(rateInput);
-    if(r>0){persist(prev=>({...prev,exchangeRate:r}));showToast("تم تحديث سعر الصرف ✓");}
-    setEditingRate(false);
-  };
-
+  const saveRate=()=>{ const r=parseFloat(rateInput); if(r>0){persist(prev=>({...prev,exchangeRate:r}));showToast("تم تحديث سعر الصرف ✓");} setEditingRate(false); };
   const amt=parseFloat(convertAmount)||0;
   const convertResult=convertDir==="usd_to_lbp"?amt*rate:amt*1000/rate;
-
   const confirmConvert=()=>{
     if(amt<=0) return;
-    persist(prev=>{
-      let newUSD=prev.balanceUSD||0;
-      let newLBP=prev.balanceLBP||0;
-      if(convertDir==="usd_to_lbp"){newUSD-=amt;newLBP+=amt*rate;}
-      else{newLBP-=amt*1000;newUSD+=amt*1000/rate;}
-      return {...prev,balanceUSD:newUSD,balanceLBP:newLBP};
-    });
-    showToast("تم التحويل ✓");
-    setConvertAmount("");
-  };
-
-  const saveUsers=()=>{
-    persist(prev=>({...prev,users}));
-    showToast("تم حفظ المستخدمين ✓");
-    setEditingUsers(false);
+    persist(prev=>{ let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0; if(convertDir==="usd_to_lbp"){newUSD-=amt;newLBP+=amt*rate;}else{newLBP-=amt*1000;newUSD+=amt*1000/rate;} return {...prev,balanceUSD:newUSD,balanceLBP:newLBP}; });
+    showToast("تم التحويل ✓"); setConvertAmount("");
   };
 
   return (
     <div>
       <TopBar title="الإعدادات" />
       <div style={{ padding:"0 16px" }}>
-
-        {/* الرصيد */}
         <div style={{ background:`linear-gradient(135deg, ${COLORS.bgCard}, ${COLORS.bgCard2})`, border:`1px solid ${COLORS.border}`, borderRadius:18, padding:18, marginBottom:16 }}>
           <div style={{ fontSize:13, color:COLORS.textDim, fontWeight:700, marginBottom:12 }}>الرصيد الحالي</div>
           <div style={{ display:"flex", gap:10 }}>
@@ -1384,7 +1161,6 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
           </div>
         </div>
 
-        {/* تحويل العملة */}
         <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:showConvert?16:0 }}>
             <div style={{ fontWeight:800, fontSize:14 }}>🔄 تحويل العملة</div>
@@ -1403,9 +1179,7 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
               {amt>0&&(
                 <div style={{ background:COLORS.bgCard2, borderRadius:12, padding:14, marginBottom:12, textAlign:"center" }}>
                   <div style={{ fontSize:12, color:COLORS.textDim, marginBottom:6 }}>النتيجة</div>
-                  <div style={{ fontSize:22, fontWeight:800, color:convertDir==="usd_to_lbp"?COLORS.blue:COLORS.green }}>
-                    {convertDir==="usd_to_lbp"?`${fmtLBP(convertResult)} ل.ل`:`$${fmt(convertResult)}`}
-                  </div>
+                  <div style={{ fontSize:22, fontWeight:800, color:convertDir==="usd_to_lbp"?COLORS.blue:COLORS.green }}>{convertDir==="usd_to_lbp"?`${fmtLBP(convertResult)} ل.ل`:`$${fmt(convertResult)}`}</div>
                 </div>
               )}
               <SaveBtn onClick={confirmConvert} disabled={amt<=0} label="تأكيد التحويل" color={COLORS.blue} />
@@ -1413,7 +1187,6 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
           )}
         </div>
 
-        {/* سعر الصرف */}
         <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
           <div style={{ fontWeight:800, fontSize:14, marginBottom:10 }}>💱 سعر الصرف</div>
           {editingRate?(
@@ -1430,37 +1203,15 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
           )}
         </div>
 
-        {/* المستخدمون */}
-        <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:editingUsers?14:0 }}>
-            <div style={{ fontWeight:800, fontSize:14 }}>👥 المستخدمون</div>
-            <button onClick={()=>setEditingUsers(s=>!s)} style={{ background:`${COLORS.blue}20`, border:`1px solid ${COLORS.blue}40`, borderRadius:8, padding:"6px 12px", color:COLORS.blue, fontWeight:700, fontSize:13, cursor:"pointer" }}>{editingUsers?"إخفاء":"تعديل"}</button>
-          </div>
-          {editingUsers&&(
-            <>
-              {users.map((u,i)=>(
-                <div key={u.id} style={{ background:COLORS.bgCard2, borderRadius:12, padding:12, marginBottom:10 }}>
-                  <div style={{ fontSize:12, color:COLORS.textDim, marginBottom:8, fontWeight:700 }}>{u.displayName}</div>
-                  <Field label="اسم المستخدم">
-                    <input style={inputStyle} value={u.username} onChange={e=>{const nu=[...users];nu[i]={...nu[i],username:e.target.value};setUsers(nu);}} />
-                  </Field>
-                  <Field label="كلمة المرور">
-                    <input style={inputStyle} type="password" value={u.password} onChange={e=>{const nu=[...users];nu[i]={...nu[i],password:e.target.value};setUsers(nu);}} />
-                  </Field>
-                  <Field label="الاسم الظاهر">
-                    <input style={inputStyle} value={u.displayName} onChange={e=>{const nu=[...users];nu[i]={...nu[i],displayName:e.target.value};setUsers(nu);}} />
-                  </Field>
-                </div>
-              ))}
-              <SaveBtn onClick={saveUsers} label="حفظ المستخدمين" />
-            </>
-          )}
-        </div>
-
-        {/* تعديل الرصيد */}
         <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
           <div style={{ fontWeight:800, fontSize:14, marginBottom:6 }}>✏️ تعديل الرصيد يدوياً</div>
           <ManualBalanceEditor data={data} persist={persist} showToast={showToast} />
+        </div>
+
+        <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
+          <div style={{ fontWeight:800, fontSize:14, marginBottom:8 }}>👤 الحساب الحالي</div>
+          <div style={{ fontSize:14, color:COLORS.textDim }}>مرحباً: <span style={{ color:COLORS.text, fontWeight:700 }}>{currentUser?.displayName}</span></div>
+          <div style={{ fontSize:12, color:COLORS.textFaint, marginTop:4 }}>اسم المستخدم: {currentUser?.username}</div>
         </div>
 
         <button onClick={onLogout} style={{ width:"100%", background:COLORS.red, border:"none", borderRadius:14, padding:"14px", color:"#fff", fontSize:16, fontWeight:800, cursor:"pointer", marginBottom:20 }}>
@@ -1475,19 +1226,8 @@ function ManualBalanceEditor({ data, persist, showToast }) {
   const [usd,setUsd]=useState(String(data.balanceUSD||0));
   const [lbp,setLbp]=useState(String(Math.round((data.balanceLBP||0)/1000)));
   const [editing,setEditing]=useState(false);
-
-  const save=()=>{
-    persist(prev=>({...prev,balanceUSD:parseFloat(usd)||0,balanceLBP:(parseFloat(lbp)||0)*1000}));
-    showToast("تم تحديث الرصيد ✓");
-    setEditing(false);
-  };
-
-  if(!editing) return (
-    <button onClick={()=>setEditing(true)} style={{ width:"100%", background:COLORS.bgCard2, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"12px 14px", color:COLORS.text, cursor:"pointer", fontSize:14, display:"flex", justifyContent:"space-between" }}>
-      <span>تعديل الرصيد</span><Edit3 size={16} color={COLORS.textDim}/>
-    </button>
-  );
-
+  const save=()=>{ persist(prev=>({...prev,balanceUSD:parseFloat(usd)||0,balanceLBP:(parseFloat(lbp)||0)*1000})); showToast("تم تحديث الرصيد ✓"); setEditing(false); };
+  if(!editing) return <button onClick={()=>setEditing(true)} style={{ width:"100%", background:COLORS.bgCard2, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"12px 14px", color:COLORS.text, cursor:"pointer", fontSize:14, display:"flex", justifyContent:"space-between" }}><span>تعديل الرصيد</span><Edit3 size={16} color={COLORS.textDim}/></button>;
   return (
     <>
       <Field label="الرصيد بالدولار ($)">
@@ -1509,4 +1249,4 @@ function ManualBalanceEditor({ data, persist, showToast }) {
       </div>
     </>
   );
-}
+                                                      }
