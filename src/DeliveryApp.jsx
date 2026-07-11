@@ -1,40 +1,43 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  Home, BarChart3, Settings, Plus, ChevronLeft,
-  ShoppingBag, HandCoins, Banknote, Lock, ArrowLeftRight, X, Trash2,
-  ChevronRight as ChevronRightIcon, Edit3, Check, RefreshCw, Eye, EyeOff, Users
+  Home, BarChart3, Settings, Plus, ChevronLeft, ShoppingBag,
+  HandCoins, Banknote, ArrowLeftRight, X, Trash2,
+  ChevronRight as ChevronRightIcon, Edit3, Check, RefreshCw,
+  Eye, EyeOff, Users, TrendingUp, TrendingDown, Wallet
 } from "lucide-react";
 
 const COLORS = {
-  bg: "#11151c", bgCard: "#1b212b", bgCard2: "#222933", border: "#2a3240",
-  green: "#22c55e", greenDim: "#16a34a", orange: "#f97316", blue: "#3b82f6",
-  red: "#ef4444", purple: "#a855f7", yellow: "#eab308",
-  text: "#f3f4f6", textDim: "#9ca3af", textFaint: "#6b7280",
+  bg: "#0f1117", bgCard: "#1a1d27", bgCard2: "#21253a",
+  border: "#2a2f45", green: "#00c896", greenDim: "#00a07a",
+  orange: "#ff8c42", blue: "#4f8ef7", red: "#ff4d6d",
+  purple: "#b06cf3", yellow: "#ffd166", teal: "#06d6a0",
+  text: "#f0f2ff", textDim: "#8b90b0", textFaint: "#5a5f7a",
 };
 
-const COMPANY_COLORS = ["#ef4444","#3b82f6","#22c55e","#f97316","#a855f7","#eab308","#06b6d4","#ec4899"];
+const COMPANY_COLORS = ["#ff4d6d","#4f8ef7","#00c896","#ff8c42","#b06cf3","#ffd166","#06d6a0","#f72585"];
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const fmt = (n, d = 2) => Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmtLBP = (n) => Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
 
-const STORAGE_KEY = "delivery_app_data";
+const STORAGE_KEY = "delivery_v2_data";
 
 const DEFAULT_DATA = {
   exchangeRate: 89000,
+  balanceUSD: 0,
+  balanceLBP: 0,
   companies: [],
-  entries: [],
-  closures: [],
-  personalDebts: [], // {id, name, amountUSD, amountLBP, direction, note, createdAt, payments:[]}
-  auth: { username: "admin", password: "1234" },
+  orders: [],
+  expenses: [],
+  personalDebts: [],
+  auth: { pin: "1234" },
 };
 
 function loadData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_DATA;
-    const parsed = JSON.parse(raw);
-    return { ...DEFAULT_DATA, ...parsed };
+    return { ...DEFAULT_DATA, ...JSON.parse(raw) };
   } catch { return DEFAULT_DATA; }
 }
 
@@ -42,31 +45,14 @@ function saveData(data) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
 }
 
-function BigButton({ icon: Icon, label, color, onClick }) {
-  return (
-    <button onClick={onClick} style={{ background: color, border: "none", borderRadius: 16, padding: "16px 12px", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, cursor: "pointer", color: "#fff", boxShadow: "0 4px 14px rgba(0,0,0,0.35)", WebkitTapHighlightColor: "transparent" }}>
-      <Icon size={26} strokeWidth={2.2} />
-      <span style={{ fontSize: 15, fontWeight: 700 }}>{label}</span>
-    </button>
-  );
-}
-
-function StatBox({ label, value, color, prefix = "$" }) {
-  return (
-    <div style={{ background: COLORS.bgCard, borderRadius: 14, padding: "12px 10px", border: `1px solid ${COLORS.border}`, textAlign: "center" }}>
-      <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 800, color }}>{prefix} {fmt(value)}</div>
-    </div>
-  );
-}
-
+// مكونات مساعدة
 function TopBar({ title, onBack, right }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 12px", position: "sticky", top: 0, background: COLORS.bg, zIndex: 10 }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 12px", position: "sticky", top: 0, background: COLORS.bg, zIndex: 10, borderBottom: `1px solid ${COLORS.border}` }}>
       <div style={{ width: 36 }}>
         {onBack && <button onClick={onBack} style={{ background: "none", border: "none", color: COLORS.text, cursor: "pointer", padding: 6 }}><ChevronRightIcon size={24} /></button>}
       </div>
-      <div style={{ fontSize: 19, fontWeight: 800, color: COLORS.text }}>{title}</div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: COLORS.text }}>{title}</div>
       <div style={{ width: 36, display: "flex", justifyContent: "flex-end" }}>{right}</div>
     </div>
   );
@@ -81,9 +67,13 @@ function Field({ label, children }) {
   );
 }
 
-const inputStyle = { width: "100%", background: COLORS.bgCard2, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "13px 14px", color: COLORS.text, fontSize: 16, outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
+const inputStyle = {
+  width: "100%", background: COLORS.bgCard2, border: `1px solid ${COLORS.border}`,
+  borderRadius: 12, padding: "13px 14px", color: COLORS.text, fontSize: 16,
+  outline: "none", boxSizing: "border-box", fontFamily: "inherit",
+};
 
-function SaveButton({ onClick, label = "حفظ", color = COLORS.green, disabled }) {
+function SaveBtn({ onClick, label = "حفظ", color = COLORS.green, disabled }) {
   return (
     <button onClick={onClick} disabled={disabled} style={{ width: "100%", background: disabled ? COLORS.textFaint : color, border: "none", borderRadius: 14, padding: "16px", color: "#fff", fontSize: 17, fontWeight: 800, cursor: disabled ? "not-allowed" : "pointer", marginTop: 8 }}>
       {label}
@@ -93,341 +83,459 @@ function SaveButton({ onClick, label = "حفظ", color = COLORS.green, disabled 
 
 function Row({ label, value, valueColor }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between" }}>
-      <span>{label}</span>
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
+      <span style={{ color: COLORS.textDim }}>{label}</span>
       <span style={{ fontWeight: 700, color: valueColor || COLORS.text }}>{value}</span>
     </div>
   );
 }
 
-function fmtDual(usd, lbp) {
-  const parts = [];
-  if (usd) parts.push(`$${fmt(usd)}`);
-  if (lbp) parts.push(`${fmtLBP(lbp)} ل.ل`);
-  return parts.length === 0 ? "$0.00" : parts.join(" + ");
+function CurrencyToggle({ value, onChange }) {
+  return (
+    <div style={{ display: "flex", gap: 6, marginBottom: 10, background: COLORS.bgCard2, borderRadius: 10, padding: 4 }}>
+      <button onClick={() => onChange("usd")} style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontWeight: 700, cursor: "pointer", background: value === "usd" ? COLORS.green : "transparent", color: value === "usd" ? "#fff" : COLORS.textDim, fontSize: 13 }}>$ دولار</button>
+      <button onClick={() => onChange("lbp")} style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontWeight: 700, cursor: "pointer", background: value === "lbp" ? COLORS.blue : "transparent", color: value === "lbp" ? "#fff" : COLORS.textDim, fontSize: 13 }}>ل.ل ليرة</button>
+    </div>
+  );
 }
 
-function toDatetimeLocal(ts) {
-  const d = new Date(ts);
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function computeCompanyStats(data, companyId) {
-  const entries = data.entries.filter((e) => e.companyId === companyId);
-  let profit = 0, debt = 0, expense = 0, tips = 0, dueToCompany = 0, paidUSD = 0, paidLBP = 0;
-  entries.forEach((e) => {
-    if (e.type === "order") {
-      profit += e.profitTotalUSD || 0; tips += e.tipsTotalUSD || 0;
-      dueToCompany += e.dueToCompanyUSD || 0;
-      paidUSD += e.paidUSD || 0; paidLBP += e.paidLBP || 0;
-    } else if (e.type === "debt") {
-      if (e.direction === "owedByMe") { debt -= e.amountUSD; paidUSD -= e.rawUSD || 0; paidLBP -= e.amountLBP || 0; }
-      else { debt += e.amountUSD; paidUSD += e.rawUSD || 0; paidLBP += e.amountLBP || 0; }
-    } else if (e.type === "repay") {
-      debt -= e.amountUSD;
-    } else if (e.type === "expense") {
-      expense += e.amountUSD; paidUSD -= e.rawUSD || 0; paidLBP -= e.amountLBP || 0;
-    }
-  });
-  return { profit, debt, expense, tips, dueToCompany, paidUSD, paidLBP };
-}
-
-function computeTotals(data) {
-  let profit = 0, debt = 0, expense = 0, tips = 0, dueToCompany = 0, paidUSD = 0, paidLBP = 0;
-  data.companies.forEach((c) => {
-    const s = computeCompanyStats(data, c.id);
-    profit += s.profit; debt += s.debt; expense += s.expense; tips += s.tips;
-    dueToCompany += s.dueToCompany; paidUSD += s.paidUSD; paidLBP += s.paidLBP;
-  });
-  data.entries.forEach((e) => {
-    if (e.type === "convert") { paidUSD -= e.fromUSD||0; paidUSD += e.toUSD||0; paidLBP -= e.fromLBP||0; paidLBP += e.toLBP||0; }
-  });
-  return { profit, debt, expense, tips, dueToCompany, paidUSD, paidLBP };
-}
-
-// حساب الديون الشخصية
-function computePersonalDebts(personalDebts) {
-  let totalOwedToMe = 0, totalOwedByMe = 0;
-  personalDebts.forEach((d) => {
-    const paid = (d.payments || []).reduce((s, p) => s + (p.amountUSD || 0), 0);
-    const remaining = Math.max(0, d.amountUSD - paid);
-    if (d.direction === "owedToMe") totalOwedToMe += remaining;
-    else totalOwedByMe += remaining;
-  });
-  return { totalOwedToMe, totalOwedByMe, net: totalOwedToMe - totalOwedByMe };
-}
-
+function AmountInput({ currency, value, onChange, placeholder = "0" }) {
+  return (
+    <div style={{ position: "relative" }}>
+      <input style={{ ...inputStyle, paddingInlineStart: currency === "usd" ? 28 : 14, paddingInlineEnd: currency === "lbp" ? 60 : 14 }}
+        type="number" inputMode="decimal" value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} />
+      {currency === "usd" && <span style={{ position: "absolute", insetInlineStart: 12, top: "50%", transform: "translateY(-50%)", color: COLORS.textDim, fontWeight: 700 }}>$</span>}
+      {currency === "lbp" && <span style={{ position: "absolute", insetInlineEnd: 12, top: "50%", transform: "translateY(-50%)", color: COLORS.textDim, fontSize: 12, fontWeight: 700 }}>ألف ل.ل</span>}
+      {currency === "lbp" && value && <div style={{ fontSize: 11, color: COLORS.textFaint, marginTop: 4 }}>= {fmtLBP((parseFloat(value)||0)*1000)} ل.ل</div>}
+    </div>
+  );
+ // شاشة السبلاش
 function SplashScreen() {
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #11151c 0%, #1b212b 50%, #11151c 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24 }}>
-      <div style={{ fontSize: 80 }}>🛵</div>
+    <div style={{ minHeight: "100vh", background: `linear-gradient(135deg, ${COLORS.bg} 0%, #1a1d27 50%, ${COLORS.bg} 100%)`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24 }}>
+      <div style={{ width: 100, height: 100, borderRadius: 28, background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.blue})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 50, boxShadow: `0 20px 60px ${COLORS.green}40` }}>🛵</div>
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.text }}>دليفري بزنس</div>
-        <div style={{ fontSize: 14, color: COLORS.textDim, marginTop: 6 }}>إدارة الدليفري والحسابات</div>
+        <div style={{ fontSize: 30, fontWeight: 800, color: COLORS.text }}>دليفري بزنس</div>
+        <div style={{ fontSize: 14, color: COLORS.textDim, marginTop: 6 }}>إدارة مالية شاملة ومبسطة</div>
       </div>
-      <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-        {[0,1,2].map((i) => <div key={i} style={{ width: 8, height: 8, borderRadius: 99, background: COLORS.green, opacity: 0.3 + i * 0.35 }} />)}
+      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        {[0,1,2].map((i) => (
+          <div key={i} style={{ width: 8, height: 8, borderRadius: 99, background: i === 1 ? COLORS.green : COLORS.border }} />
+        ))}
       </div>
     </div>
   );
 }
 
-function LoginScreen({ onLogin, auth }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPass, setShowPass] = useState(false);
-  const [error, setError] = useState("");
-  const submit = () => {
-    if (username === auth.username && password === auth.password) onLogin();
-    else setError("اسم المستخدم أو كلمة المرور غير صحيحة");
+// شاشة PIN
+function PinScreen({ onSuccess, pin }) {
+  const [entered, setEntered] = useState("");
+  const [error, setError] = useState(false);
+
+  const handleKey = (k) => {
+    if (k === "del") { setEntered(p => p.slice(0, -1)); setError(false); return; }
+    if (entered.length >= 4) return;
+    const next = entered + k;
+    setEntered(next);
+    if (next.length === 4) {
+      if (next === pin) { onSuccess(); }
+      else { setError(true); setTimeout(() => { setEntered(""); setError(false); }, 600); }
+    }
   };
+
+  const keys = ["1","2","3","4","5","6","7","8","9","","0","del"];
+
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #11151c 0%, #1b212b 50%, #11151c 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ textAlign: "center", marginBottom: 32 }}>
-        <div style={{ fontSize: 60, marginBottom: 12 }}>🛵</div>
-        <div style={{ fontSize: 26, fontWeight: 800, color: COLORS.text }}>دليفري بزنس</div>
-        <div style={{ fontSize: 14, color: COLORS.textDim, marginTop: 4 }}>إدارة الدليفري والحسابات</div>
+    <div style={{ minHeight: "100vh", background: COLORS.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ width: 70, height: 70, borderRadius: 20, background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.blue})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34, marginBottom: 24, boxShadow: `0 10px 30px ${COLORS.green}40` }}>🛵</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: COLORS.text, marginBottom: 6 }}>دليفري بزنس</div>
+      <div style={{ fontSize: 14, color: COLORS.textDim, marginBottom: 32 }}>أدخل رمز PIN للدخول</div>
+
+      {/* نقاط PIN */}
+      <div style={{ display: "flex", gap: 16, marginBottom: 40 }}>
+        {[0,1,2,3].map(i => (
+          <div key={i} style={{ width: 16, height: 16, borderRadius: 99, background: error ? COLORS.red : entered.length > i ? COLORS.green : COLORS.border, transition: "all 0.2s", transform: error ? "scale(1.3)" : "scale(1)" }} />
+        ))}
       </div>
-      <div style={{ width: "100%", maxWidth: 400, background: COLORS.bgCard, borderRadius: 20, padding: 24, border: `1px solid ${COLORS.border}` }}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: COLORS.text, marginBottom: 20, textAlign: "center" }}>تسجيل الدخول</div>
-        <Field label="اسم المستخدم"><input style={inputStyle} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="أدخل اسم المستخدم" autoCapitalize="none" /></Field>
-        <Field label="كلمة المرور">
-          <div style={{ position: "relative" }}>
-            <input style={inputStyle} type={showPass ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="أدخل كلمة المرور" onKeyDown={(e) => e.key === "Enter" && submit()} />
-            <button onClick={() => setShowPass(s => !s)} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: COLORS.textDim, cursor: "pointer" }}>{showPass ? <EyeOff size={18} /> : <Eye size={18} />}</button>
-          </div>
-        </Field>
-        {error && <div style={{ color: COLORS.red, fontSize: 13, marginBottom: 10, fontWeight: 600, textAlign: "center" }}>{error}</div>}
-        <SaveButton onClick={submit} label="دخول" disabled={!username || !password} />
+
+      {/* لوحة الأرقام */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, width: "100%", maxWidth: 280 }}>
+        {keys.map((k, i) => (
+          k === "" ? <div key={i} /> :
+          <button key={i} onClick={() => handleKey(k)} style={{ background: k === "del" ? COLORS.bgCard2 : COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: "18px 0", color: COLORS.text, fontSize: k === "del" ? 18 : 24, fontWeight: 700, cursor: "pointer", WebkitTapHighlightColor: "transparent", boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>
+            {k === "del" ? "⌫" : k}
+          </button>
+        ))}
       </div>
     </div>
   );
 }
 
+// التطبيق الرئيسي
 export default function DeliveryApp() {
   const [data, setData] = useState(() => loadData());
   const [splash, setSplash] = useState(true);
   const [loggedIn, setLoggedIn] = useState(false);
   const [screen, setScreen] = useState("home");
-  const [selectedCompanyId, setSelectedCompanyId] = useState(null);
-  const [entryFormType, setEntryFormType] = useState(null);
-  const [editingEntryId, setEditingEntryId] = useState(null);
-  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [subScreen, setSubScreen] = useState(null);
+  const [editingItem, setEditingItem] = useState(null);
   const [toast, setToast] = useState(null);
 
   useEffect(() => { const t = setTimeout(() => setSplash(false), 2000); return () => clearTimeout(t); }, []);
 
   const persist = useCallback((updater) => {
-    setData((prev) => { const next = typeof updater === "function" ? updater(prev) : updater; saveData(next); return next; });
+    setData((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      saveData(next);
+      return next;
+    });
   }, []);
 
-  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 1800); };
-
-  if (splash) return <SplashScreen />;
-  if (!loggedIn) return <LoginScreen onLogin={() => setLoggedIn(true)} auth={data.auth || DEFAULT_DATA.auth} />;
-
-  const company = data.companies.find((c) => c.id === selectedCompanyId);
-  const showNav = ["home", "reports", "settings", "personalDebts"].includes(screen);
-
-  const quickStart = (companyId, type) => {
-    setSelectedCompanyId(companyId); setEntryFormType(type);
-    setEditingEntryId(null); setQuickAddOpen(false); setScreen("entryForm");
+  const showToast = (msg, color = COLORS.green) => {
+    setToast({ msg, color });
+    setTimeout(() => setToast(null), 2000);
   };
 
+  const rate = data.exchangeRate || 89000;
+
+  if (splash) return <SplashScreen />;
+  if (!loggedIn) return <PinScreen onSuccess={() => setLoggedIn(true)} pin={data.auth?.pin || "1234"} />;
+
+  const showNav = ["home", "orders", "expenses", "debts", "settings"].includes(screen) && !subScreen;
+
+  const goTo = (s, sub = null) => { setScreen(s); setSubScreen(sub); setEditingItem(null); };
+
   let content;
+
   if (screen === "home") {
-    content = <HomeScreen data={data} onOpenCompany={(id) => { setSelectedCompanyId(id); setScreen("company"); }} onAddCompany={() => setScreen("addCompany")} onOpenConvert={() => setScreen("convert")} onQuickAction={quickStart} onOpenPersonalDebts={() => setScreen("personalDebts")} />;
-  } else if (screen === "addCompany") {
-    content = <AddCompanyScreen onBack={() => setScreen("home")} onSave={(name, color) => { persist((prev) => ({ ...prev, companies: [...prev.companies, { id: uid(), name, color }] })); showToast("تمت إضافة الشركة"); setScreen("home"); }} />;
-  } else if (screen === "company" && company) {
-    content = <CompanyScreen data={data} persist={persist} company={company} onBack={() => setScreen("home")} onAction={(type) => { setEntryFormType(type); setEditingEntryId(null); setScreen("entryForm"); }} onEditEntry={(entry) => { setEntryFormType(entry.type); setEditingEntryId(entry.id); setScreen("entryForm"); }} onCloseAccount={() => setScreen("closeAccount")} showToast={showToast} onDeleteCompany={() => { persist((prev) => ({ ...prev, companies: prev.companies.filter((c) => c.id !== company.id), entries: prev.entries.filter((e) => e.companyId !== company.id) })); setScreen("home"); }} />;
-  } else if (screen === "entryForm" && company) {
-    const editingEntry = editingEntryId ? data.entries.find((e) => e.id === editingEntryId) : null;
-    content = <EntryFormScreen type={entryFormType} company={company} companies={data.companies} data={data} editingEntry={editingEntry} onBack={() => { setEditingEntryId(null); setScreen("company"); }} onSave={(entry) => { persist((prev) => { if (editingEntryId) return { ...prev, entries: prev.entries.map((e) => e.id === editingEntryId ? entry : e) }; return { ...prev, entries: [...prev.entries, entry] }; }); showToast(editingEntryId ? "تم تعديل العملية" : "تم الحفظ"); setEditingEntryId(null); setScreen("company"); }} />;
-  } else if (screen === "closeAccount" && company) {
-    content = <CloseAccountScreen company={company} data={data} persist={persist} onBack={() => setScreen("company")} showToast={showToast} onDone={() => setScreen("company")} />;
-  } else if (screen === "convert") {
-    content = <ConvertScreen data={data} persist={persist} onBack={() => setScreen("home")} showToast={showToast} />;
-  } else if (screen === "reports") {
-    content = <ReportsScreen data={data} />;
+    content = <HomeScreen data={data} persist={persist} showToast={showToast} goTo={goTo} rate={rate} />;
+  } else if (screen === "orders") {
+    if (subScreen === "add" || subScreen === "edit") {
+      content = <OrderForm data={data} persist={persist} showToast={showToast} editing={editingItem} onBack={() => { setSubScreen(null); setEditingItem(null); }} rate={rate} />;
+    } else {
+      content = <OrdersScreen data={data} persist={persist} showToast={showToast} goTo={goTo} rate={rate} onEdit={(item) => { setEditingItem(item); setSubScreen("edit"); }} />;
+    }
+  } else if (screen === "expenses") {
+    if (subScreen === "add" || subScreen === "edit") {
+      content = <ExpenseForm data={data} persist={persist} showToast={showToast} editing={editingItem} onBack={() => { setSubScreen(null); setEditingItem(null); }} rate={rate} />;
+    } else {
+      content = <ExpensesScreen data={data} persist={persist} showToast={showToast} goTo={goTo} rate={rate} onEdit={(item) => { setEditingItem(item); setSubScreen("edit"); }} />;
+    }
+  } else if (screen === "debts") {
+    if (subScreen === "add" || subScreen === "edit") {
+      content = <DebtForm data={data} persist={persist} showToast={showToast} editing={editingItem} onBack={() => { setSubScreen(null); setEditingItem(null); }} rate={rate} />;
+    } else if (subScreen === "pay") {
+      content = <PayDebtScreen debt={editingItem} persist={persist} showToast={showToast} onBack={() => { setSubScreen(null); setEditingItem(null); }} />;
+    } else {
+      content = <DebtsScreen data={data} persist={persist} showToast={showToast} goTo={goTo} rate={rate} onEdit={(item) => { setEditingItem(item); setSubScreen("edit"); }} onPay={(item) => { setEditingItem(item); setSubScreen("pay"); }} />;
+    }
   } else if (screen === "settings") {
-    content = <SettingsScreen data={data} persist={persist} onBack={() => setScreen("home")} showToast={showToast} onLogout={() => setLoggedIn(false)} />;
-  } else if (screen === "personalDebts") {
-    content = <PersonalDebtsScreen data={data} persist={persist} onBack={() => setScreen("home")} showToast={showToast} />;
-  } else {
-    content = <HomeScreen data={data} onOpenCompany={(id) => { setSelectedCompanyId(id); setScreen("company"); }} onAddCompany={() => setScreen("addCompany")} onOpenConvert={() => setScreen("convert")} onQuickAction={quickStart} onOpenPersonalDebts={() => setScreen("personalDebts")} />;
+    content = <SettingsScreen data={data} persist={persist} showToast={showToast} onLogout={() => setLoggedIn(false)} rate={rate} />;
   }
 
   return (
     <div dir="rtl" style={{ height: "100vh", background: COLORS.bg, fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif", color: COLORS.text, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", minHeight: 0 }}>
         {content}
-        <div style={{ height: 16 }} />
+        <div style={{ height: 20 }} />
       </div>
-      {toast && <div style={{ position: "absolute", bottom: showNav ? 78 : 16, left: "50%", transform: "translateX(-50%)", background: COLORS.greenDim, color: "#fff", padding: "10px 22px", borderRadius: 30, fontSize: 14, fontWeight: 700, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 100 }}>{toast}</div>}
-      {showNav && <BottomNav screen={screen} setScreen={setScreen} />}
-      {showNav && screen === "home" && <button onClick={() => setQuickAddOpen(true)} style={{ position: "absolute", bottom: 88, insetInlineEnd: 20, width: 56, height: 56, borderRadius: 99, background: COLORS.green, border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 6px 18px rgba(34,197,94,0.45)", cursor: "pointer", zIndex: 60 }}><Plus size={28} strokeWidth={2.4} /></button>}
-      {quickAddOpen && <QuickAddSheet companies={data.companies} onClose={() => setQuickAddOpen(false)} onPick={quickStart} />}
+      {toast && (
+        <div style={{ position: "fixed", bottom: showNav ? 90 : 20, left: "50%", transform: "translateX(-50%)", background: toast.color, color: "#fff", padding: "10px 24px", borderRadius: 30, fontSize: 14, fontWeight: 700, boxShadow: "0 4px 20px rgba(0,0,0,0.4)", zIndex: 200, whiteSpace: "nowrap" }}>
+          {toast.msg}
+        </div>
+      )}
+      {showNav && <BottomNav screen={screen} setScreen={(s) => { setScreen(s); setSubScreen(null); setEditingItem(null); }} />}
     </div>
   );
 }
 
 function BottomNav({ screen, setScreen }) {
   const items = [
-    { key: "reports", label: "التقارير", icon: BarChart3 },
-    { key: "home", label: "الرئيسية", icon: Home },
-    { key: "personalDebts", label: "الديون", icon: Users },
     { key: "settings", label: "الإعدادات", icon: Settings },
+    { key: "debts", label: "الديون", icon: Users },
+    { key: "home", label: "الرئيسية", icon: Home },
+    { key: "expenses", label: "المصروفات", icon: Banknote },
+    { key: "orders", label: "الطلبات", icon: ShoppingBag },
   ];
   return (
     <div style={{ flexShrink: 0, background: COLORS.bgCard, borderTop: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-around", padding: "10px 0 calc(10px + env(safe-area-inset-bottom))", zIndex: 50 }}>
-      {items.map((it) => { const active = screen === it.key; const Icon = it.icon; return <button key={it.key} onClick={() => setScreen(it.key)} style={{ background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, color: active ? COLORS.green : COLORS.textFaint, cursor: "pointer" }}><Icon size={22} /><span style={{ fontSize: 11, fontWeight: 700 }}>{it.label}</span></button>; })}
+      {items.map((it) => {
+        const active = screen === it.key;
+        const Icon = it.icon;
+        return (
+          <button key={it.key} onClick={() => setScreen(it.key)} style={{ background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, color: active ? COLORS.green : COLORS.textFaint, cursor: "pointer", padding: "4px 8px" }}>
+            <Icon size={22} />
+            <span style={{ fontSize: 10, fontWeight: 700 }}>{it.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
-}
+      }function HomeScreen({ data, persist, showToast, goTo, rate }) {
+  const todayStr = new Date().toDateString();
 
-// شاشة الديون الشخصية
-function PersonalDebtsScreen({ data, persist, onBack, showToast }) {
-  const [showForm, setShowForm] = useState(false);
-  const [editingDebt, setEditingDebt] = useState(null);
-  const [payingDebt, setPayingDebt] = useState(null);
+  // حساب الإجماليات
+  const todayOrders = data.orders.filter(o => new Date(o.createdAt).toDateString() === todayStr);
+  const todayProfitUSD = todayOrders.reduce((s, o) => s + (o.currency === "usd" ? o.profit : 0), 0);
+  const todayProfitLBP = todayOrders.reduce((s, o) => s + (o.currency === "lbp" ? o.profit * 1000 : 0), 0);
+
+  const allOrders = data.orders || [];
+  const totalDueUSD = allOrders.filter(o => o.currency === "usd").reduce((s, o) => s + (o.dueToCompany || 0), 0);
+  const totalDueLBP = allOrders.filter(o => o.currency === "lbp").reduce((s, o) => s + (o.dueToCompany || 0) * 1000, 0);
+  const totalTipsUSD = allOrders.filter(o => o.currency === "usd").reduce((s, o) => s + (o.tips || 0), 0);
+  const totalTipsLBP = allOrders.filter(o => o.currency === "lbp").reduce((s, o) => s + (o.tips || 0) * 1000, 0);
+
+  const totalExpensesUSD = (data.expenses || []).filter(e => e.currency === "usd").reduce((s, e) => s + (e.amount || 0), 0);
+  const totalExpensesLBP = (data.expenses || []).filter(e => e.currency === "lbp").reduce((s, e) => s + (e.amount || 0) * 1000, 0);
 
   const personalDebts = data.personalDebts || [];
-  const { totalOwedToMe, totalOwedByMe, net } = computePersonalDebts(personalDebts);
+  const debtOwedToMeUSD = personalDebts.filter(d => d.direction === "owedToMe" && d.currency === "usd").reduce((s, d) => { const paid = (d.payments||[]).reduce((a,p) => a + (p.amount||0), 0); return s + Math.max(0, d.amount - paid); }, 0);
+  const debtOwedByMeUSD = personalDebts.filter(d => d.direction === "owedByMe" && d.currency === "usd").reduce((s, d) => { const paid = (d.payments||[]).reduce((a,p) => a + (p.amount||0), 0); return s + Math.max(0, d.amount - paid); }, 0);
+  const debtOwedToMeLBP = personalDebts.filter(d => d.direction === "owedToMe" && d.currency === "lbp").reduce((s, d) => { const paid = (d.payments||[]).reduce((a,p) => a + (p.amount||0), 0); return s + Math.max(0, d.amount - paid) * 1000; }, 0);
+  const debtOwedByMeLBP = personalDebts.filter(d => d.direction === "owedByMe" && d.currency === "lbp").reduce((s, d) => { const paid = (d.payments||[]).reduce((a,p) => a + (p.amount||0), 0); return s + Math.max(0, d.amount - paid) * 1000; }, 0);
 
-  const saveDebt = (debt) => {
+  // الرصيد الكلي
+  const balanceUSD = (data.balanceUSD || 0);
+  const balanceLBP = (data.balanceLBP || 0);
+
+  // آخر العمليات
+  const allOps = [
+    ...(data.orders||[]).map(o => ({ ...o, _type: "order" })),
+    ...(data.expenses||[]).map(e => ({ ...e, _type: "expense" })),
+    ...(data.personalDebts||[]).map(d => ({ ...d, _type: "debt" })),
+  ].sort((a,b) => b.createdAt - a.createdAt).slice(0, 5);
+
+  return (
+    <div style={{ padding: "0 0 16px" }}>
+      {/* الهيدر */}
+      <div style={{ background: `linear-gradient(135deg, #1a1d27 0%, #21253a 100%)`, padding: "20px 16px 24px", marginBottom: 0 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div>
+            <div style={{ fontSize: 13, color: COLORS.textDim, fontWeight: 600 }}>الرصيد الكلي</div>
+            <div style={{ fontSize: 11, color: COLORS.textFaint, marginTop: 2 }}>سعر الصرف: 1$ = {fmtLBP(rate)} ل.ل</div>
+          </div>
+          <div style={{ fontSize: 28 }}>🛵</div>
+        </div>
+
+        {/* الرصيد */}
+        <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+          <div style={{ flex: 1, background: "rgba(0,200,150,0.15)", border: `1px solid ${COLORS.green}40`, borderRadius: 16, padding: "14px 12px" }}>
+            <div style={{ color: COLORS.green, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>$ بالدولار</div>
+            <div style={{ color: COLORS.text, fontSize: 22, fontWeight: 800 }}>${fmt(balanceUSD)}</div>
+          </div>
+          <div style={{ flex: 1, background: "rgba(79,142,247,0.15)", border: `1px solid ${COLORS.blue}40`, borderRadius: 16, padding: "14px 12px" }}>
+            <div style={{ color: COLORS.blue, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>ل.ل بالليرة</div>
+            <div style={{ color: COLORS.text, fontSize: 18, fontWeight: 800 }}>{fmtLBP(balanceLBP)}</div>
+          </div>
+        </div>
+
+        {/* بطاقة اليوم */}
+        <div style={{ background: `linear-gradient(135deg, ${COLORS.green}20, ${COLORS.blue}20)`, border: `1px solid ${COLORS.green}30`, borderRadius: 16, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 4 }}>أرباح اليوم</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.green }}>${fmt(todayProfitUSD)}</div>
+            {todayProfitLBP > 0 && <div style={{ fontSize: 13, color: COLORS.blue, marginTop: 2 }}>{fmtLBP(todayProfitLBP)} ل.ل</div>}
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 11, color: COLORS.textFaint }}>طلبات اليوم</div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.text }}>{todayOrders.length}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* الإحصائيات */}
+      <div style={{ padding: "16px 16px 0" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+          <StatCard label="مترتب للشركة $" value={`$${fmt(totalDueUSD)}`} color={COLORS.orange} sub={totalDueLBP > 0 ? `${fmtLBP(totalDueLBP)} ل.ل` : null} onClick={() => goTo("orders")} />
+          <StatCard label="إجمالي التيبس" value={`$${fmt(totalTipsUSD)}`} color={COLORS.purple} sub={totalTipsLBP > 0 ? `${fmtLBP(totalTipsLBP)} ل.ل` : null} onClick={() => goTo("orders")} />
+          <StatCard label="المصروفات $" value={`$${fmt(totalExpensesUSD)}`} color={COLORS.red} sub={totalExpensesLBP > 0 ? `${fmtLBP(totalExpensesLBP)} ل.ل` : null} onClick={() => goTo("expenses")} />
+          <StatCard label="ديون لي" value={`$${fmt(debtOwedToMeUSD)}`} color={COLORS.green} sub={debtOwedToMeLBP > 0 ? `${fmtLBP(debtOwedToMeLBP)} ل.ل` : null} onClick={() => goTo("debts")} />
+        </div>
+
+        {/* أزرار سريعة */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
+          <QuickBtn icon="📦" label="طلب جديد" color={COLORS.green} onClick={() => goTo("orders", "add")} />
+          <QuickBtn icon="💸" label="مصروف جديد" color={COLORS.red} onClick={() => goTo("expenses", "add")} />
+          <QuickBtn icon="🔄" label="تحويل عملة" color={COLORS.blue} onClick={() => goTo("settings")} />
+          <QuickBtn icon="👥" label="دين شخصي" color={COLORS.orange} onClick={() => goTo("debts", "add")} />
+        </div>
+
+        {/* آخر العمليات */}
+        <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 12 }}>آخر العمليات</div>
+        {allOps.length === 0 && <div style={{ textAlign: "center", color: COLORS.textFaint, padding: "30px 0" }}>لا توجد عمليات بعد</div>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {allOps.map((op) => <RecentOpRow key={op.id} op={op} />)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, color, sub, onClick }) {
+  return (
+    <div onClick={onClick} style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: "12px 14px", cursor: "pointer" }}>
+      <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 6, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 800, color }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: COLORS.textFaint, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function QuickBtn({ icon, label, color, onClick }) {
+  return (
+    <button onClick={onClick} style={{ background: `${color}18`, border: `1px solid ${color}40`, borderRadius: 14, padding: "14px 12px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
+      <span style={{ fontSize: 22 }}>{icon}</span>
+      <span style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>{label}</span>
+    </button>
+  );
+}
+
+function RecentOpRow({ op }) {
+  const isOrder = op._type === "order";
+  const isExpense = op._type === "expense";
+  const isDebt = op._type === "debt";
+
+  const icon = isOrder ? "📦" : isExpense ? "💸" : op.direction === "owedToMe" ? "💰" : "👤";
+  const label = isOrder ? `طلب — ${op.companyName || ""}` : isExpense ? `مصروف — ${op.category || ""}` : isDebt ? `دين — ${op.name}` : "";
+  const amountStr = isOrder
+    ? op.currency === "usd" ? `+$${fmt(op.profit)}` : `+${fmtLBP(op.profit * 1000)} ل.ل`
+    : isExpense
+    ? op.currency === "usd" ? `-$${fmt(op.amount)}` : `-${fmtLBP(op.amount * 1000)} ل.ل`
+    : op.direction === "owedToMe"
+    ? op.currency === "usd" ? `+$${fmt(op.amount)}` : `+${fmtLBP(op.amount * 1000)} ل.ل`
+    : op.currency === "usd" ? `-$${fmt(op.amount)}` : `-${fmtLBP(op.amount * 1000)} ل.ل`;
+
+  const amtColor = amountStr.startsWith("+") ? COLORS.green : COLORS.red;
+  const dt = new Date(op.createdAt);
+  const timeStr = dt.toLocaleTimeString("ar-LB", { hour: "2-digit", minute: "2-digit" });
+  const dateStr = dt.toLocaleDateString("ar-LB", { day: "2-digit", month: "2-digit" });
+
+  return (
+    <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: 20 }}>{icon}</span>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>{label}</div>
+          <div style={{ fontSize: 11, color: COLORS.textFaint }}>{dateStr} · {timeStr}</div>
+        </div>
+      </div>
+      <div style={{ fontWeight: 800, color: amtColor, fontSize: 14 }}>{amountStr}</div>
+    </div>
+  );
+                                                                                                                                  }function OrdersScreen({ data, persist, showToast, goTo, rate, onEdit }) {
+  const [filter, setFilter] = useState("all");
+  const orders = data.orders || [];
+
+  const filtered = useMemo(() => {
+    const today = new Date().toDateString();
+    const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const month = new Date(); month.setDate(1); month.setHours(0,0,0,0);
+    if (filter === "today") return orders.filter(o => new Date(o.createdAt).toDateString() === today);
+    if (filter === "week") return orders.filter(o => o.createdAt >= week);
+    if (filter === "month") return orders.filter(o => o.createdAt >= month.getTime());
+    return orders;
+  }, [orders, filter]);
+
+  const totalProfitUSD = filtered.filter(o => o.currency === "usd").reduce((s,o) => s + (o.profit||0), 0);
+  const totalProfitLBP = filtered.filter(o => o.currency === "lbp").reduce((s,o) => s + (o.profit||0)*1000, 0);
+  const totalDueUSD = filtered.filter(o => o.currency === "usd").reduce((s,o) => s + (o.dueToCompany||0), 0);
+  const totalDueLBP = filtered.filter(o => o.currency === "lbp").reduce((s,o) => s + (o.dueToCompany||0)*1000, 0);
+  const totalTipsUSD = filtered.filter(o => o.currency === "usd").reduce((s,o) => s + (o.tips||0), 0);
+  const totalTipsLBP = filtered.filter(o => o.currency === "lbp").reduce((s,o) => s + (o.tips||0)*1000, 0);
+
+  const deleteOrder = (id) => {
+    const order = orders.find(o => o.id === id);
+    if (!order) return;
     persist((prev) => {
-      const debts = prev.personalDebts || [];
-      if (editingDebt) return { ...prev, personalDebts: debts.map(d => d.id === editingDebt.id ? debt : d) };
-      return { ...prev, personalDebts: [...debts, debt] };
+      const newBalanceUSD = order.currency === "usd" ? (prev.balanceUSD||0) - (order.profit||0) : prev.balanceUSD||0;
+      const newBalanceLBP = order.currency === "lbp" ? (prev.balanceLBP||0) - (order.profit||0)*1000 : prev.balanceLBP||0;
+      return { ...prev, orders: prev.orders.filter(o => o.id !== id), balanceUSD: newBalanceUSD, balanceLBP: newBalanceLBP };
     });
-    showToast(editingDebt ? "تم تعديل الدين" : "تم إضافة الدين");
-    setShowForm(false);
-    setEditingDebt(null);
+    showToast("تم حذف الطلب");
   };
-
-  const deleteDebt = (id) => {
-    persist((prev) => ({ ...prev, personalDebts: (prev.personalDebts || []).filter(d => d.id !== id) }));
-    showToast("تم الحذف");
-  };
-
-  const addPayment = (debtId, payment) => {
-    persist((prev) => ({
-      ...prev,
-      personalDebts: (prev.personalDebts || []).map(d =>
-        d.id === debtId ? { ...d, payments: [...(d.payments || []), payment] } : d
-      )
-    }));
-    showToast("تم تسجيل الدفعة");
-    setPayingDebt(null);
-  };
-
-  if (showForm || editingDebt) return <PersonalDebtForm debt={editingDebt} onSave={saveDebt} onBack={() => { setShowForm(false); setEditingDebt(null); }} />;
-  if (payingDebt) return <PayDebtScreen debt={payingDebt} onSave={(p) => addPayment(payingDebt.id, p)} onBack={() => setPayingDebt(null)} />;
 
   return (
     <div>
-      <TopBar title="الديون الشخصية" onBack={onBack} right={
-        <button onClick={() => setShowForm(true)} style={{ background: "none", border: "none", color: COLORS.green, cursor: "pointer" }}><Plus size={24} /></button>
+      <TopBar title="الطلبات" right={
+        <button onClick={() => goTo("orders", "add")} style={{ background: COLORS.green, border: "none", borderRadius: 10, padding: "8px 12px", color: "#fff", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>+ جديد</button>
       } />
       <div style={{ padding: "0 16px" }}>
+        {/* فلتر */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 16, background: COLORS.bgCard2, borderRadius: 12, padding: 4 }}>
+          {[{k:"all",l:"الكل"},{k:"today",l:"اليوم"},{k:"week",l:"الأسبوع"},{k:"month",l:"الشهر"}].map(f => (
+            <button key={f.k} onClick={() => setFilter(f.k)} style={{ flex: 1, padding: "8px 4px", borderRadius: 9, border: "none", fontWeight: 700, fontSize: 12, cursor: "pointer", background: filter===f.k ? COLORS.green : "transparent", color: filter===f.k ? "#fff" : COLORS.textDim }}>{f.l}</button>
+          ))}
+        </div>
 
         {/* ملخص */}
-        <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-          <div style={{ flex: 1, background: COLORS.green, borderRadius: 16, padding: "14px 12px", textAlign: "center" }}>
-            <div style={{ color: "rgba(255,255,255,0.8)", fontSize: 12, fontWeight: 600 }}>ديون لي</div>
-            <div style={{ color: "#fff", fontSize: 20, fontWeight: 800, marginTop: 4 }}>${fmt(totalOwedToMe)}</div>
-          </div>
-          <div style={{ flex: 1, background: COLORS.red, borderRadius: 16, padding: "14px 12px", textAlign: "center" }}>
-            <div style={{ color: "rgba(255,255,255,0.8)", fontSize: 12, fontWeight: 600 }}>ديون عليّ</div>
-            <div style={{ color: "#fff", fontSize: 20, fontWeight: 800, marginTop: 4 }}>${fmt(totalOwedByMe)}</div>
+        <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10, color: COLORS.textDim }}>ملخص الفترة</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 4 }}>الأرباح $</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: COLORS.green }}>${fmt(totalProfitUSD)}</div>
+              {totalProfitLBP > 0 && <div style={{ fontSize: 10, color: COLORS.blue }}>{fmtLBP(totalProfitLBP)} ل.ل</div>}
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 4 }}>مترتب للشركة</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: COLORS.orange }}>${fmt(totalDueUSD)}</div>
+              {totalDueLBP > 0 && <div style={{ fontSize: 10, color: COLORS.blue }}>{fmtLBP(totalDueLBP)} ل.ل</div>}
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 4 }}>التيبس</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: COLORS.purple }}>${fmt(totalTipsUSD)}</div>
+              {totalTipsLBP > 0 && <div style={{ fontSize: 10, color: COLORS.blue }}>{fmtLBP(totalTipsLBP)} ل.ل</div>}
+            </div>
           </div>
         </div>
 
-        <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: "14px 16px", marginBottom: 20, textAlign: "center" }}>
-          <div style={{ fontSize: 13, color: COLORS.textDim, marginBottom: 4 }}>الصافي</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: net >= 0 ? COLORS.green : COLORS.red }}>{net >= 0 ? "+" : ""}${fmt(net)}</div>
+        {/* القائمة */}
+        {filtered.length === 0 && <div style={{ textAlign: "center", color: COLORS.textFaint, padding: "40px 0" }}>لا توجد طلبات</div>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {[...filtered].sort((a,b) => b.createdAt - a.createdAt).map(order => (
+            <OrderCard key={order.id} order={order} onDelete={() => deleteOrder(order.id)} onEdit={() => onEdit(order)} />
+          ))}
         </div>
-
-        {/* زر إضافة */}
-        <button onClick={() => setShowForm(true)} style={{ width: "100%", background: COLORS.orange, border: "none", borderRadius: 14, padding: "14px", color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-          <Plus size={20} /> إضافة دين شخصي
-        </button>
-
-        {/* قائمة الديون */}
-        {personalDebts.length === 0 && <div style={{ textAlign: "center", color: COLORS.textFaint, padding: "40px 0", fontSize: 14 }}>لا توجد ديون شخصية بعد</div>}
-
-        {/* ديون لي */}
-        {personalDebts.filter(d => d.direction === "owedToMe").length > 0 && (
-          <>
-            <div style={{ fontSize: 14, fontWeight: 800, color: COLORS.green, marginBottom: 8 }}>ديون لي 💰</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-              {personalDebts.filter(d => d.direction === "owedToMe").map(d => <PersonalDebtCard key={d.id} debt={d} onDelete={() => deleteDebt(d.id)} onEdit={() => setEditingDebt(d)} onPay={() => setPayingDebt(d)} />)}
-            </div>
-          </>
-        )}
-
-        {/* ديون عليّ */}
-        {personalDebts.filter(d => d.direction === "owedByMe").length > 0 && (
-          <>
-            <div style={{ fontSize: 14, fontWeight: 800, color: COLORS.red, marginBottom: 8 }}>ديون عليّ 💸</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-              {personalDebts.filter(d => d.direction === "owedByMe").map(d => <PersonalDebtCard key={d.id} debt={d} onDelete={() => deleteDebt(d.id)} onEdit={() => setEditingDebt(d)} onPay={() => setPayingDebt(d)} />)}
-            </div>
-          </>
-        )}
       </div>
     </div>
   );
 }
 
-function PersonalDebtCard({ debt, onDelete, onEdit, onPay }) {
+function OrderCard({ order, onDelete, onEdit }) {
   const [open, setOpen] = useState(false);
-  const paid = (debt.payments || []).reduce((s, p) => s + (p.amountUSD || 0), 0);
-  const remaining = Math.max(0, debt.amountUSD - paid);
-  const isOwedToMe = debt.direction === "owedToMe";
-  const color = isOwedToMe ? COLORS.green : COLORS.red;
-  const isSettled = remaining <= 0;
+  const isUSD = order.currency === "usd";
+  const sym = isUSD ? "$" : "";
+  const suf = isUSD ? "" : " ألف ل.ل";
+  const dt = new Date(order.createdAt);
 
   return (
-    <div style={{ background: COLORS.bgCard, border: `1px solid ${isSettled ? COLORS.green : COLORS.border}`, borderRadius: 12, padding: 12, opacity: isSettled ? 0.7 : 1 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }} onClick={() => setOpen(o => !o)}>
+    <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 14, overflow: "hidden" }}>
+      <div onClick={() => setOpen(o => !o)} style={{ padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 10, background: color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 800, color: "#fff", flexShrink: 0 }}>
-            {debt.name.slice(0, 1)}
-          </div>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: `${COLORS.green}20`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>📦</div>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 15 }}>{debt.name}</div>
-            <div style={{ fontSize: 11, color: COLORS.textFaint }}>
-              {isSettled ? "✅ مسدّد" : `متبقي: $${fmt(remaining)}`}
-            </div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{order.companyName || "طلب"} {order.orderNumber ? `#${order.orderNumber}` : ""}</div>
+            <div style={{ fontSize: 11, color: COLORS.textFaint }}>{dt.toLocaleDateString("ar-LB")} · {dt.toLocaleTimeString("ar-LB", {hour:"2-digit",minute:"2-digit"})}</div>
           </div>
         </div>
-        <div style={{ fontWeight: 800, color, fontSize: 16 }}>${fmt(debt.amountUSD)}</div>
+        <div style={{ textAlign: "left" }}>
+          <div style={{ fontWeight: 800, color: COLORS.green, fontSize: 15 }}>{isUSD ? `+$${fmt(order.profit)}` : `+${fmt(order.profit)} ألف ل.ل`}</div>
+          <div style={{ fontSize: 11, color: COLORS.textFaint }}>ربح</div>
+        </div>
       </div>
 
       {open && (
-        <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${COLORS.border}`, fontSize: 13, color: COLORS.textDim, display: "flex", flexDirection: "column", gap: 4 }}>
-          <Row label="المبلغ الكلي" value={`$${fmt(debt.amountUSD)}`} valueColor={color} />
-          <Row label="المدفوع" value={`$${fmt(paid)}`} valueColor={COLORS.green} />
-          <Row label="المتبقي" value={`$${fmt(remaining)}`} valueColor={remaining > 0 ? COLORS.orange : COLORS.green} />
-          {debt.note && <Row label="ملاحظة" value={debt.note} />}
-          {(debt.payments || []).length > 0 && (
-            <div style={{ marginTop: 6 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.textDim, marginBottom: 4 }}>الدفعات:</div>
-              {debt.payments.map((p, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "2px 0" }}>
-                  <span>{new Date(p.date).toLocaleDateString("ar-LB")}</span>
-                  <span style={{ color: COLORS.green, fontWeight: 700 }}>${fmt(p.amountUSD)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-            {!isSettled && <button onClick={onPay} style={{ flex: 1, background: COLORS.blue, border: "none", borderRadius: 8, padding: "8px", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>تسديد دفعة</button>}
-            <button onClick={onEdit} style={{ background: "none", border: "none", color: COLORS.blue, fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Edit3 size={13} /> تعديل</button>
-            <button onClick={onDelete} style={{ background: "none", border: "none", color: COLORS.red, fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Trash2 size={13} /> حذف</button>
+        <div style={{ borderTop: `1px solid ${COLORS.border}`, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 6 }}>
+          <Row label="قيمة الطلب" value={`${sym}${fmt(order.orderValue)}${suf}`} />
+          <Row label="الربح" value={`${sym}${fmt(order.profit)}${suf}`} valueColor={COLORS.green} />
+          <Row label="مترتب للشركة" value={`${sym}${fmt(order.dueToCompany)}${suf}`} valueColor={COLORS.orange} />
+          <Row label="المقبوض $" value={`$${fmt(order.collectedUSD||0)}`} />
+          {(order.collectedLBP||0) > 0 && <Row label="المقبوض ل.ل" value={`${fmtLBP((order.collectedLBP||0)*1000)} ل.ل`} />}
+          <Row label="التيبس" value={isUSD ? `$${fmt(order.tips||0)}` : `${fmt(order.tips||0)} ألف ل.ل`} valueColor={COLORS.purple} />
+          {order.note && <Row label="ملاحظات" value={order.note} />}
+          <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
+            <button onClick={onEdit} style={{ background: "none", border: "none", color: COLORS.blue, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Edit3 size={14} /> تعديل</button>
+            <button onClick={onDelete} style={{ background: "none", border: "none", color: COLORS.red, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Trash2 size={14} /> حذف</button>
           </div>
         </div>
       )}
@@ -435,586 +543,754 @@ function PersonalDebtCard({ debt, onDelete, onEdit, onPay }) {
   );
 }
 
-function PersonalDebtForm({ debt, onSave, onBack }) {
-  const [name, setName] = useState(debt ? debt.name : "");
-  const [amount, setAmount] = useState(debt ? String(debt.amountUSD) : "");
-  const [direction, setDirection] = useState(debt ? debt.direction : "owedToMe");
-  const [note, setNote] = useState(debt ? debt.note || "" : "");
+function OrderForm({ data, persist, showToast, editing, onBack, rate }) {
+  const e = editing;
+  const [currency, setCurrency] = useState(e?.currency || "usd");
+  const [companyName, setCompanyName] = useState(e?.companyName || "");
+  const [orderNumber, setOrderNumber] = useState(e?.orderNumber || "");
+  const [orderValue, setOrderValue] = useState(e ? String(e.orderValue||"") : "");
+  const [profit, setProfit] = useState(e ? String(e.profit||"") : "");
+  const [collectedUSD, setCollectedUSD] = useState(e ? String(e.collectedUSD||"") : "");
+  const [collectedLBP, setCollectedLBP] = useState(e ? String(e.collectedLBP||"") : "");
+  const [note, setNote] = useState(e?.note || "");
 
-  const valid = name.trim() && parseFloat(amount) > 0;
-  const save = () => onSave({
-    id: debt ? debt.id : uid(),
-    name: name.trim(),
-    amountUSD: parseFloat(amount) || 0,
-    direction,
-    note: note.trim(),
-    createdAt: debt ? debt.createdAt : Date.now(),
-    payments: debt ? debt.payments : [],
-  });
+  const ov = parseFloat(orderValue) || 0;
+  const pr = parseFloat(profit) || 0;
+  const dueToCompany = Math.max(0, ov - pr);
 
-  return (
-    <div>
-      <TopBar title={debt ? "تعديل الدين" : "إضافة دين شخصي"} onBack={onBack} />
-      <div style={{ padding: "0 16px" }}>
-        <Field label="نوع الدين">
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setDirection("owedToMe")} style={{ flex: 1, padding: "12px", borderRadius: 10, border: "none", fontWeight: 700, cursor: "pointer", background: direction === "owedToMe" ? COLORS.green : COLORS.bgCard2, color: direction === "owedToMe" ? "#fff" : COLORS.textDim }}>دين لي 💰</button>
-            <button onClick={() => setDirection("owedByMe")} style={{ flex: 1, padding: "12px", borderRadius: 10, border: "none", fontWeight: 700, cursor: "pointer", background: direction === "owedByMe" ? COLORS.red : COLORS.bgCard2, color: direction === "owedByMe" ? "#fff" : COLORS.textDim }}>دين عليّ 💸</button>
-          </div>
-        </Field>
-        <Field label="اسم الشخص"><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: أحمد" autoFocus /></Field>
-        <Field label="المبلغ ($)"><input style={inputStyle} type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" /></Field>
-        <Field label="ملاحظة (اختياري)"><input style={inputStyle} value={note} onChange={(e) => setNote(e.target.value)} placeholder="سبب الدين..." /></Field>
-        <SaveButton disabled={!valid} onClick={save} color={direction === "owedToMe" ? COLORS.green : COLORS.red} label={debt ? "حفظ التعديلات" : "إضافة الدين"} />
-      </div>
-    </div>
-  );
-}
+  // حساب التيبس
+  let tips = 0;
+  if (currency === "usd") {
+    const colUSD = parseFloat(collectedUSD) || 0;
+    const colLBP = (parseFloat(collectedLBP) || 0) * 1000 / rate;
+    const totalCollected = colUSD + colLBP;
+    tips = Math.max(0, totalCollected - dueToCompany - pr);
+  } else {
+    const colUSD = (parseFloat(collectedUSD) || 0) * rate / 1000;
+    const colLBP = parseFloat(collectedLBP) || 0;
+    const totalCollected = colUSD + colLBP;
+    tips = Math.max(0, totalCollected - dueToCompany - pr);
+  }
 
-function PayDebtScreen({ debt, onSave, onBack }) {
-  const [amount, setAmount] = useState("");
-  const valid = parseFloat(amount) > 0;
-  const save = () => onSave({ amountUSD: parseFloat(amount) || 0, date: Date.now() });
-  return (
-    <div>
-      <TopBar title={`تسديد دفعة — ${debt.name}`} onBack={onBack} />
-      <div style={{ padding: "0 16px" }}>
-        <Field label="مبلغ الدفعة ($)"><input style={inputStyle} type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" autoFocus /></Field>
-        <SaveButton disabled={!valid} onClick={save} color={COLORS.blue} label="تسجيل الدفعة" />
-      </div>
-    </div>
-  );
-}
+  const valid = ov > 0 && pr >= 0;
 
-function QuickAddSheet({ companies, onClose, onPick }) {
-  const [pickedCompany, setPickedCompany] = useState(null);
-  const actions = [{ type: "order", label: "إدخال طلب", icon: ShoppingBag, color: COLORS.green }, { type: "debt", label: "إدخال دين", icon: Plus, color: COLORS.orange }, { type: "repay", label: "تسديد دين", icon: HandCoins, color: COLORS.blue }, { type: "expense", label: "مصروف", icon: Banknote, color: COLORS.red }];
-  return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 200, display: "flex", alignItems: "flex-end" }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", background: COLORS.bgCard, borderRadius: "20px 20px 0 0", padding: "18px 16px calc(20px + env(safe-area-inset-bottom))", maxHeight: "75vh", overflowY: "auto" }}>
-        <div style={{ width: 40, height: 4, background: COLORS.border, borderRadius: 99, margin: "0 auto 16px" }} />
-        {!pickedCompany ? (
-          <>
-            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 14, textAlign: "center" }}>اختر الشركة</div>
-            {companies.length === 0 ? <div style={{ textAlign: "center", color: COLORS.textFaint, padding: "20px 0", fontSize: 14 }}>لا توجد شركات. أضف شركة من الرئيسية أولاً.</div> : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {companies.map((c) => <button key={c.id} onClick={() => setPickedCompany(c)} style={{ display: "flex", alignItems: "center", gap: 12, background: COLORS.bgCard2, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: 12, cursor: "pointer", textAlign: "right" }}><div style={{ width: 38, height: 38, borderRadius: 10, background: c.color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: "#fff" }}>{c.name.slice(0, 1)}</div><div style={{ fontWeight: 700, fontSize: 15 }}>{c.name}</div></button>)}
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-              <button onClick={() => setPickedCompany(null)} style={{ background: "none", border: "none", color: COLORS.textDim, cursor: "pointer", padding: 4 }}><ChevronRightIcon size={20} /></button>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: pickedCompany.color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: "#fff", fontSize: 13 }}>{pickedCompany.name.slice(0, 1)}</div>
-              <div style={{ fontWeight: 800, fontSize: 15 }}>{pickedCompany.name}</div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              {actions.map((a) => <BigButton key={a.type} icon={a.icon} label={a.label} color={a.color} onClick={() => onPick(pickedCompany.id, a.type)} />)}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
+  const save = () => {
+    const order = {
+      id: e ? e.id : uid(),
+      currency,
+      companyName: companyName.trim(),
+      orderNumber: orderNumber.trim(),
+      orderValue: ov,
+      profit: pr,
+      dueToCompany,
+      collectedUSD: parseFloat(collectedUSD) || 0,
+      collectedLBP: parseFloat(collectedLBP) || 0,
+      tips,
+      note: note.trim(),
+      createdAt: e ? e.createdAt : Date.now(),
+    };
 
-function HomeScreen({ data, onOpenCompany, onAddCompany, onOpenConvert, onQuickAction, onOpenPersonalDebts }) {
-  const totals = computeTotals(data);
-  const todayStr = new Date().toDateString();
-  const todayEntries = data.entries.filter((e) => new Date(e.createdAt).toDateString() === todayStr);
-  const todayProfit = todayEntries.filter(e => e.type === "order").reduce((s, e) => s + (e.profitTotalUSD || 0), 0);
-  const todayOrders = todayEntries.filter(e => e.type === "order").length;
-  const { totalOwedToMe, totalOwedByMe } = computePersonalDebts(data.personalDebts || []);
+    persist((prev) => {
+      let newBalanceUSD = prev.balanceUSD || 0;
+      let newBalanceLBP = prev.balanceLBP || 0;
 
-  return (
-    <div style={{ padding: "16px 16px 0" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-        <div style={{ fontSize: 22, fontWeight: 800 }}>الرئيسية</div>
-        <button onClick={onOpenConvert} style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "8px 12px", color: COLORS.text, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}><ArrowLeftRight size={16} /><span style={{ fontSize: 13, fontWeight: 700 }}>تحويل عملة</span></button>
-      </div>
+      // إذا تعديل، نرجع القيمة القديمة أولاً
+      if (e) {
+        if (e.currency === "usd") newBalanceUSD -= e.profit || 0;
+        else newBalanceLBP -= (e.profit || 0) * 1000;
+      }
 
-      {/* بطاقة اليوم */}
-      <div style={{ background: "linear-gradient(135deg, #16a34a, #22c55e)", borderRadius: 20, padding: "18px 20px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div>
-          <div style={{ color: "rgba(255,255,255,0.8)", fontSize: 13, fontWeight: 600 }}>أرباح اليوم</div>
-          <div style={{ color: "#fff", fontSize: 28, fontWeight: 800, marginTop: 4 }}>${fmt(todayProfit)}</div>
-          <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, marginTop: 4 }}>{todayOrders} طلب اليوم</div>
-        </div>
-        <div style={{ fontSize: 48 }}>🛵</div>
-      </div>
+      // نضيف الجديد
+      if (currency === "usd") newBalanceUSD += pr;
+      else newBalanceLBP += pr * 1000;
 
-      {/* بطاقة الديون الشخصية */}
-      <div onClick={onOpenPersonalDebts} style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: "14px 16px", marginBottom: 16, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 24 }}>💰</div>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 14 }}>الديون الشخصية</div>
-            <div style={{ fontSize: 12, color: COLORS.textDim, marginTop: 2 }}>
-              لي: <span style={{ color: COLORS.green }}>${fmt(totalOwedToMe)}</span> &nbsp;|&nbsp; عليّ: <span style={{ color: COLORS.red }}>${fmt(totalOwedByMe)}</span>
-            </div>
-          </div>
-        </div>
-        <ChevronLeft size={18} color={COLORS.textFaint} />
-      </div>
+      const orders = e
+        ? prev.orders.map(o => o.id === e.id ? order : o)
+        : [...(prev.orders||[]), order];
 
-      <div style={{ fontSize: 13, color: COLORS.textDim, marginBottom: 8, fontWeight: 700 }}>المجموع الكلي المقبوض من الزبائن</div>
-      <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-        <div style={{ flex: 1, background: COLORS.green, borderRadius: 16, padding: "16px 14px" }}><div style={{ color: "#fff", fontSize: 12, fontWeight: 700, opacity: 0.85 }}>$ مجموع الدولار</div><div style={{ color: "#fff", fontSize: 22, fontWeight: 800, marginTop: 4 }}>${fmt(totals.paidUSD)}</div></div>
-        <div style={{ flex: 1, background: COLORS.blue, borderRadius: 16, padding: "16px 14px" }}><div style={{ color: "#fff", fontSize: 12, fontWeight: 700, opacity: 0.85 }}>ل.ل مجموع الليرة</div><div style={{ color: "#fff", fontSize: 20, fontWeight: 800, marginTop: 4 }}>{fmtLBP(totals.paidLBP)}</div></div>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
-        <StatBox label="إجمالي الأرباح" value={totals.profit} color={COLORS.green} />
-        <StatBox label="إجمالي المصروف" value={totals.expense} color={COLORS.red} />
-        <StatBox label="إجمالي الديون" value={totals.debt} color={COLORS.orange} />
-        <StatBox label="إجمالي التيبس" value={totals.tips} color={COLORS.purple} />
-        <StatBox label="مرتب للشركة" value={totals.dueToCompany} color={COLORS.yellow} />
-      </div>
-
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 16, fontWeight: 800 }}>الشركات</div>
-        <button onClick={onAddCompany} style={{ background: "none", border: "none", color: COLORS.green, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Plus size={16} /> إضافة شركة</button>
-      </div>
-      {data.companies.length === 0 && <div style={{ textAlign: "center", color: COLORS.textFaint, padding: "40px 0", fontSize: 14 }}>لا توجد شركات بعد. اضغط "إضافة شركة" للبدء</div>}
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {data.companies.map((c) => {
-          const s = computeCompanyStats(data, c.id);
-          const todayCount = todayEntries.filter((e) => e.companyId === c.id && e.type === "order").length;
-          return (
-            <div key={c.id} onClick={() => onOpenCompany(c.id)} role="button" style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 14, display: "flex", flexDirection: "column", gap: 12, cursor: "pointer", textAlign: "right" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ width: 48, height: 48, borderRadius: 12, background: c.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 800, color: "#fff", flexShrink: 0 }}>{c.name.slice(0, 1)}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>{c.name}</div>
-                  <div style={{ fontSize: 12, color: COLORS.textDim }}>الطلبات اليوم: {todayCount} &nbsp;|&nbsp; الأرباح: <span style={{ color: COLORS.green }}>${fmt(s.profit, 2)}</span></div>
-                  <div style={{ fontSize: 12, color: COLORS.textDim, marginTop: 2 }}>الدين: <span style={{ color: s.debt > 0 ? COLORS.orange : COLORS.textFaint }}>${fmt(s.debt, 2)}</span></div>
-                </div>
-                <ChevronLeft size={20} color={COLORS.textFaint} />
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={(ev) => { ev.stopPropagation(); onQuickAction(c.id, "order"); }} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: COLORS.green, border: "none", borderRadius: 10, padding: "9px 0", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}><Plus size={15} /> طلب</button>
-                <button onClick={(ev) => { ev.stopPropagation(); onQuickAction(c.id, "expense"); }} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: COLORS.red, border: "none", borderRadius: 10, padding: "9px 0", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}><Plus size={15} /> مصروف</button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function AddCompanyScreen({ onBack, onSave }) {
-  const [name, setName] = useState("");
-  const [color, setColor] = useState(COMPANY_COLORS[0]);
-  return (
-    <div>
-      <TopBar title="إضافة شركة جديدة" onBack={onBack} />
-      <div style={{ padding: "0 16px" }}>
-        <Field label="اسم الشركة"><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: Godzilla" autoFocus /></Field>
-        <Field label="لون الشركة"><div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{COMPANY_COLORS.map((c) => <button key={c} onClick={() => setColor(c)} style={{ width: 40, height: 40, borderRadius: 12, background: c, border: color === c ? "3px solid #fff" : "3px solid transparent", cursor: "pointer" }} />)}</div></Field>
-        <SaveButton disabled={!name.trim()} onClick={() => onSave(name.trim(), color)} />
-      </div>
-    </div>
-  );
-}
-
-function CompanyScreen({ data, persist, company, onBack, onAction, onEditEntry, onCloseAccount, showToast, onDeleteCompany }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const s = computeCompanyStats(data, company.id);
-  const allEntries = data.entries.filter((e) => e.companyId === company.id).sort((a, b) => b.createdAt - a.createdAt);
-  const entries = useMemo(() => {
-    const q = search.trim();
-    if (!q) return allEntries;
-    const qNum = parseFloat(q.replace(",", "."));
-    return allEntries.filter((e) => {
-      if (e.type === "order") { if (!isNaN(qNum)) { if (Math.abs((e.orderValueTotalUSD||0)-qNum)<0.01) return true; if (Math.abs((e.orderValueUSD||0)-qNum)<0.01) return true; } if (e.orderNumber && e.orderNumber.includes(q)) return true; return false; }
-      if (!isNaN(qNum)) return Math.abs((e.amountUSD||0)-qNum)<0.01;
-      return false;
+      return { ...prev, orders, balanceUSD: newBalanceUSD, balanceLBP: newBalanceLBP };
     });
-  }, [allEntries, search]);
-  const deleteEntry = (id) => { persist((prev) => ({ ...prev, entries: prev.entries.filter((e) => e.id !== id) })); showToast("تم الحذف"); };
-  return (
-    <div>
-      <TopBar title={company.name} onBack={onBack} right={
-        <div style={{ position: "relative" }}>
-          <button onClick={() => setMenuOpen((m) => !m)} style={{ background: "none", border: "none", color: COLORS.text, cursor: "pointer" }}>⋮</button>
-          {menuOpen && <div style={{ position: "absolute", top: 30, left: 0, background: COLORS.bgCard2, border: `1px solid ${COLORS.border}`, borderRadius: 10, overflow: "hidden", zIndex: 20, minWidth: 140 }}><button onClick={() => { setMenuOpen(false); onDeleteCompany(); }} style={{ display: "block", width: "100%", padding: "10px 14px", background: "none", border: "none", color: COLORS.red, fontSize: 13, fontWeight: 700, textAlign: "right", cursor: "pointer" }}>حذف الشركة</button></div>}
-        </div>
-      } />
-      <div style={{ padding: "0 16px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-          <div style={{ width: 56, height: 56, borderRadius: 14, background: company.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 800, color: "#fff" }}>{company.name.slice(0, 1)}</div>
-          <div style={{ fontSize: 20, fontWeight: 800 }}>{company.name}</div>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-          <StatBox label="مجموع الأرباح" value={s.profit} color={COLORS.green} />
-          <StatBox label="مجموع التيبس" value={s.tips} color={COLORS.purple} />
-          <StatBox label="مجموع الديون" value={s.debt} color={COLORS.orange} />
-          <StatBox label="مجموع المصروف" value={s.expense} color={COLORS.red} />
-          <StatBox label="مرتب للشركة" value={s.dueToCompany} color={COLORS.yellow} />
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
-          <BigButton icon={ShoppingBag} label="إدخال طلب" color={COLORS.green} onClick={() => onAction("order")} />
-          <BigButton icon={Plus} label="إدخال دين" color={COLORS.orange} onClick={() => onAction("debt")} />
-          <BigButton icon={HandCoins} label="تسديد دين" color={COLORS.blue} onClick={() => onAction("repay")} />
-          <BigButton icon={Banknote} label="مصروف" color={COLORS.red} onClick={() => onAction("expense")} />
-        </div>
-        <button onClick={onCloseAccount} style={{ width: "100%", background: COLORS.bgCard2, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: "14px", color: COLORS.text, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontWeight: 700, cursor: "pointer", marginBottom: 20, fontSize: 15 }}><Lock size={16} /> تسكير حساب</button>
-        <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>سجل العمليات</div>
-        <div style={{ position: "relative", marginBottom: 12 }}>
-          <input style={{ ...inputStyle, paddingInlineStart: 38 }} value={search} onChange={(ev) => setSearch(ev.target.value)} placeholder="بحث بقيمة الطلب أو رقمه..." inputMode="decimal" />
-          <span style={{ position: "absolute", insetInlineStart: 12, top: "50%", transform: "translateY(-50%)", color: COLORS.textFaint }}>🔍</span>
-          {search && <button onClick={() => setSearch("")} style={{ position: "absolute", insetInlineEnd: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: COLORS.textFaint, cursor: "pointer" }}><X size={16} /></button>}
-        </div>
-        {entries.length === 0 && <div style={{ textAlign: "center", color: COLORS.textFaint, padding: "30px 0", fontSize: 14 }}>{search ? "لا توجد نتائج مطابقة" : "لا توجد عمليات بعد"}</div>}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-          {entries.map((e) => <EntryRow key={e.id} entry={e} onDelete={() => deleteEntry(e.id)} onEdit={() => onEditEntry(e)} />)}
-        </div>
-      </div>
-    </div>
-  );
-}
 
-const TYPE_LABELS = { order: "طلب جديد", debt: "دين على الشركة", repay: "تسديد دين", expense: "مصروف" };
-const TYPE_COLORS = { order: COLORS.green, debt: COLORS.orange, repay: COLORS.blue, expense: COLORS.red };
+    showToast(e ? "تم تعديل الطلب ✓" : "تم حفظ الطلب ✓");
+    onBack();
+  };
 
-function EntryRow({ entry, onDelete, onEdit }) {
-  const [open, setOpen] = useState(false);
-  const dt = new Date(entry.createdAt);
-  const time = dt.toLocaleTimeString("ar-LB", { hour: "2-digit", minute: "2-digit" });
-  const dateStr = dt.toLocaleDateString("ar-LB", { day: "2-digit", month: "2-digit" });
-  const color = TYPE_COLORS[entry.type];
-  const label = entry.type === "debt" ? (entry.direction === "owedByMe" ? "دين عليّ" : "دين لي على الشركة") : TYPE_LABELS[entry.type];
-  const mainAmount = entry.type === "order" ? entry.dueToCompanyUSD : entry.amountUSD;
-  return (
-    <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }} onClick={() => setOpen((o) => !o)}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 8, height: 8, borderRadius: 99, background: color }} />
-          <div><div style={{ fontSize: 14, fontWeight: 700 }}>{label}</div><div style={{ fontSize: 11, color: COLORS.textFaint }}>{dateStr} · {time}</div></div>
-        </div>
-        <div style={{ fontWeight: 800, color, fontSize: 15 }}>${fmt(mainAmount)}</div>
-      </div>
-      {open && (
-        <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${COLORS.border}`, fontSize: 13, color: COLORS.textDim, display: "flex", flexDirection: "column", gap: 4 }}>
-          {entry.type === "order" && (<><Row label="قيمة الطلب" value={fmtDual(entry.orderValueUSD, entry.orderValueLBP)} /><Row label="الربح" value={fmtDual(entry.profitUSD, entry.profitLBP)} /><div style={{ background: COLORS.bgCard2, borderRadius: 10, padding: "8px 10px", margin: "4px 0" }}><Row label="المطلوب للشركة" value={`$${fmt(entry.dueToCompanyUSD)}`} valueColor={COLORS.orange} /></div><Row label="المقبوض دولار" value={`$${fmt(entry.paidUSD)}`} /><Row label="المقبوض ليرة" value={`${fmtLBP(entry.paidLBP)} ل.ل`} /><Row label="التيبس" value={`+$${fmt(entry.tipsTotalUSD)}`} valueColor={COLORS.green} />{entry.orderNumber && <Row label="رقم الطلب" value={entry.orderNumber} />}{entry.note && <Row label="ملاحظات" value={entry.note} />}</>)}
-          {entry.type !== "order" && (<>{(entry.type === "expense" || entry.type === "debt") && entry.amountLBP ? <Row label="المبلغ" value={fmtDual(entry.rawUSD||entry.amountUSD, entry.amountLBP)} /> : <Row label="المبلغ" value={`$${fmt(entry.amountUSD)}`} />}{entry.reason && <Row label="السبب / النوع" value={entry.reason} />}{entry.note && <Row label="ملاحظات" value={entry.note} />}</>)}
-          <div style={{ display: "flex", gap: 14, marginTop: 6 }}>
-            <button onClick={onEdit} style={{ background: "none", border: "none", color: COLORS.blue, fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Edit3 size={13} /> تعديل</button>
-            <button onClick={onDelete} style={{ background: "none", border: "none", color: COLORS.red, fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Trash2 size={13} /> حذف</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DualCurrencyField({ label, usd, lbp, onUsdChange, onLbpChange }) {
-  const lbpActual = (parseFloat(lbp) || 0) * 1000;
-  return (
-    <Field label={label}>
-      <div style={{ display: "flex", gap: 10 }}>
-        <div style={{ position: "relative", flex: 1 }}>
-          <input style={{ ...inputStyle, paddingInlineStart: 28 }} type="number" inputMode="decimal" value={usd} onChange={(e) => onUsdChange(e.target.value)} placeholder="0.00" />
-          <span style={{ position: "absolute", insetInlineStart: 12, top: "50%", transform: "translateY(-50%)", color: COLORS.textFaint, fontSize: 14, fontWeight: 700 }}>$</span>
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ position: "relative" }}>
-            <input style={{ ...inputStyle, paddingInlineEnd: 46 }} type="number" inputMode="decimal" value={lbp} onChange={(e) => onLbpChange(e.target.value)} placeholder="0" />
-            <span style={{ position: "absolute", insetInlineEnd: 12, top: "50%", transform: "translateY(-50%)", color: COLORS.textFaint, fontSize: 12, fontWeight: 700 }}>ألف ل.ل</span>
-          </div>
-          {lbp !== "" && <div style={{ fontSize: 11, color: COLORS.textFaint, marginTop: 4, textAlign: "left" }}>= {fmtLBP(lbpActual)} ل.ل</div>}
-        </div>
-      </div>
-    </Field>
-  );
-}
-
-function EntryFormScreen({ type, company, companies, data, editingEntry, onBack, onSave }) {
-  if (type === "order") return <OrderForm company={company} companies={companies} data={data} editingEntry={editingEntry} onBack={onBack} onSave={onSave} />;
-  return <SimpleForm type={type} company={company} companies={companies} data={data} editingEntry={editingEntry} onBack={onBack} onSave={onSave} />;
-}
-
-function OrderForm({ company, companies, data, editingEntry, onBack, onSave }) {
-  const e = editingEntry;
-  const [companyId, setCompanyId] = useState(e ? e.companyId : company.id);
-  const [orderValueUSD, setOrderValueUSD] = useState(e ? String(e.orderValueUSD||"") : "");
-  const [orderValueLBP, setOrderValueLBP] = useState(e ? String((e.orderValueLBP||0)/1000||"") : "");
-  const [profitUSD, setProfitUSD] = useState(e ? String(e.profitUSD||"") : "");
-  const [profitLBP, setProfitLBP] = useState(e ? String((e.profitLBP||0)/1000||"") : "");
-  const [paidUSD, setPaidUSD] = useState(e ? String(e.paidUSD||"") : "");
-  const [paidLBP, setPaidLBP] = useState(e ? String((e.paidLBP||0)/1000||"") : "");
-  const [orderNumber, setOrderNumber] = useState(e ? e.orderNumber||"" : "");
-  const [note, setNote] = useState(e ? e.note||"" : "");
-  const [dateTime, setDateTime] = useState(e ? toDatetimeLocal(e.createdAt) : toDatetimeLocal(Date.now()));
-  const rate = data.exchangeRate || 1;
-  const ovUSD = parseFloat(orderValueUSD)||0, ovLBP = (parseFloat(orderValueLBP)||0)*1000;
-  const prUSD = parseFloat(profitUSD)||0, prLBP = (parseFloat(profitLBP)||0)*1000;
-  const pUSD = parseFloat(paidUSD)||0, pLBP = (parseFloat(paidLBP)||0)*1000;
-  const orderValueTotalUSD = ovUSD + ovLBP/rate;
-  const profitTotalUSD = prUSD + prLBP/rate;
-  const dueToCompanyUSD = orderValueTotalUSD - profitTotalUSD;
-  const paidTotalUSD = pUSD + pLBP/rate;
-  const tipsTotalUSD = Math.max(0, paidTotalUSD - profitTotalUSD - dueToCompanyUSD);
-  const tipsTotalLBP = tipsTotalUSD * rate;
-  const grandTotalUSD = orderValueTotalUSD + profitTotalUSD + paidTotalUSD + tipsTotalUSD;
-  const valid = orderValueTotalUSD > 0;
-  const save = () => onSave({ id: e?e.id:uid(), companyId, type: "order", orderValueUSD: ovUSD, orderValueLBP: ovLBP, orderValueTotalUSD, profitUSD: prUSD, profitLBP: prLBP, profitTotalUSD, dueToCompanyUSD, paidUSD: pUSD, paidLBP: pLBP, paidTotalUSD, tipsUSD: tipsTotalUSD, tipsLBP: tipsTotalLBP, tipsTotalUSD, orderNumber: orderNumber.trim(), note: note.trim(), createdAt: new Date(dateTime).getTime()||Date.now() });
   return (
     <div>
       <TopBar title={e ? "تعديل الطلب" : "إدخال طلب جديد"} onBack={onBack} />
       <div style={{ padding: "0 16px" }}>
-        {companies.length > 1 && <Field label="الشركة"><select style={{ ...inputStyle, appearance: "none" }} value={companyId} onChange={(ev) => setCompanyId(ev.target.value)}>{companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>}
+
+        {/* اختيار العملة */}
+        <Field label="عملة الطلب">
+          <CurrencyToggle value={currency} onChange={setCurrency} />
+        </Field>
+
+        {/* ملخص الطلب */}
         <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 16 }}>
-          <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 10, fontWeight: 700 }}>ملخص الطلب</div>
-          <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-            <div style={{ flex: 1, background: COLORS.green, borderRadius: 12, padding: "12px 10px" }}><div style={{ color: "#fff", fontSize: 11, fontWeight: 700, opacity: 0.85 }}>$ بالدولار</div><div style={{ color: "#fff", fontSize: 17, fontWeight: 800, marginTop: 2 }}>${fmt(grandTotalUSD)}</div></div>
-            <div style={{ flex: 1, background: COLORS.blue, borderRadius: 12, padding: "12px 10px" }}><div style={{ color: "#fff", fontSize: 11, fontWeight: 700, opacity: 0.85 }}>ل.ل بالليرة</div><div style={{ color: "#fff", fontSize: 15, fontWeight: 800, marginTop: 2 }}>{fmtLBP(grandTotalUSD * rate)}</div></div>
+          <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 12, fontWeight: 700 }}>ملخص الطلب التلقائي</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            <div style={{ textAlign: "center", background: `${COLORS.orange}15`, borderRadius: 10, padding: 10 }}>
+              <div style={{ fontSize: 10, color: COLORS.textDim, marginBottom: 4 }}>مترتب للشركة</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: COLORS.orange }}>{currency==="usd"?`$${fmt(dueToCompany)}`:`${fmt(dueToCompany)} ألف`}</div>
+            </div>
+            <div style={{ textAlign: "center", background: `${COLORS.green}15`, borderRadius: 10, padding: 10 }}>
+              <div style={{ fontSize: 10, color: COLORS.textDim, marginBottom: 4 }}>ربحك</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: COLORS.green }}>{currency==="usd"?`$${fmt(pr)}`:`${fmt(pr)} ألف`}</div>
+            </div>
+            <div style={{ textAlign: "center", background: `${COLORS.purple}15`, borderRadius: 10, padding: 10 }}>
+              <div style={{ fontSize: 10, color: COLORS.textDim, marginBottom: 4 }}>التيبس</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: COLORS.purple }}>{currency==="usd"?`$${fmt(tips)}`:`${fmt(tips)} ألف`}</div>
+            </div>
           </div>
-          <div style={{ borderTop: `1px solid ${COLORS.border}`, paddingTop: 12 }}>
-            <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 4, fontWeight: 700 }}>مرتب للشركة</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: COLORS.orange }}>${fmt(dueToCompanyUSD)}</div>
+        </div>
+
+        <Field label="اسم الشركة (اختياري)">
+          <input style={inputStyle} value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="مثال: Godzilla" />
+        </Field>
+
+        <Field label="رقم الطلب (اختياري)">
+          <input style={inputStyle} value={orderNumber} onChange={e => setOrderNumber(e.target.value)} placeholder="#1258" />
+        </Field>
+
+        <Field label={currency==="usd" ? "قيمة الطلب ($)" : "قيمة الطلب (ألف ل.ل)"}>
+          <AmountInput currency={currency} value={orderValue} onChange={setOrderValue} />
+        </Field>
+
+        <Field label={currency==="usd" ? "ربحك ($)" : "ربحك (ألف ل.ل)"}>
+          <AmountInput currency={currency} value={profit} onChange={setProfit} />
+        </Field>
+
+        <div style={{ fontSize: 13, color: COLORS.textDim, marginBottom: 8, fontWeight: 600 }}>المقبوض من الزبون</div>
+        <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, color: COLORS.textFaint, marginBottom: 6 }}>بالدولار $</div>
+            <div style={{ position: "relative" }}>
+              <input style={{ ...inputStyle, paddingInlineStart: 24 }} type="number" inputMode="decimal" value={collectedUSD} onChange={e => setCollectedUSD(e.target.value)} placeholder="0" />
+              <span style={{ position: "absolute", insetInlineStart: 10, top: "50%", transform: "translateY(-50%)", color: COLORS.textDim, fontWeight: 700, fontSize: 14 }}>$</span>
+            </div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, color: COLORS.textFaint, marginBottom: 6 }}>بالليرة (ألف)</div>
+            <div style={{ position: "relative" }}>
+              <input style={{ ...inputStyle, paddingInlineEnd: 50 }} type="number" inputMode="decimal" value={collectedLBP} onChange={e => setCollectedLBP(e.target.value)} placeholder="0" />
+              <span style={{ position: "absolute", insetInlineEnd: 8, top: "50%", transform: "translateY(-50%)", color: COLORS.textDim, fontSize: 11, fontWeight: 700 }}>ألف</span>
+            </div>
+            {collectedLBP && <div style={{ fontSize: 10, color: COLORS.textFaint, marginTop: 3 }}>= {fmtLBP((parseFloat(collectedLBP)||0)*1000)} ل.ل</div>}
           </div>
         </div>
-        <DualCurrencyField label="قيمة الطلب" usd={orderValueUSD} lbp={orderValueLBP} onUsdChange={setOrderValueUSD} onLbpChange={setOrderValueLBP} />
-        <DualCurrencyField label="الربح" usd={profitUSD} lbp={profitLBP} onUsdChange={setProfitUSD} onLbpChange={setProfitLBP} />
-        <DualCurrencyField label="المقبوض من الزبون" usd={paidUSD} lbp={paidLBP} onUsdChange={setPaidUSD} onLbpChange={setPaidLBP} />
-        <div style={{ background: COLORS.bgCard2, borderRadius: 12, padding: 12, marginBottom: 14 }}>
-          <Row label="التيبس" value={`+$${fmt(tipsTotalUSD)} (${fmtLBP(tipsTotalLBP)} ل.ل)`} valueColor={COLORS.green} />
-        </div>
-        <Field label="رقم الطلب (اختياري)"><input style={inputStyle} value={orderNumber} onChange={(ev) => setOrderNumber(ev.target.value)} placeholder="#1258" /></Field>
-        <Field label="ملاحظات (اختياري)"><input style={inputStyle} value={note} onChange={(ev) => setNote(ev.target.value)} placeholder="مثال: طلب من مطعم..." /></Field>
-        <Field label="التاريخ والوقت"><input style={inputStyle} type="datetime-local" value={dateTime} onChange={(ev) => setDateTime(ev.target.value)} /></Field>
-        <SaveButton disabled={!valid} onClick={save} label={e ? "حفظ التعديلات" : "حفظ"} />
+
+        <Field label="ملاحظات (اختياري)">
+          <input style={inputStyle} value={note} onChange={e => setNote(e.target.value)} placeholder="ملاحظات..." />
+        </Field>
+
+        <SaveBtn disabled={!valid} onClick={save} label={e ? "حفظ التعديلات" : "حفظ الطلب"} />
       </div>
     </div>
   );
-}
+}function ExpensesScreen({ data, persist, showToast, goTo, rate, onEdit }) {
+  const [filter, setFilter] = useState("all");
+  const expenses = data.expenses || [];
 
-const FORM_CONFIG = {
-  debt: { title: "إدخال دين", editTitle: "تعديل الدين", color: COLORS.orange, reasonLabel: "السبب (اختياري)", reasonPlaceholder: "مثال: دين على الشركة" },
-  repay: { title: "تسديد دين", editTitle: "تعديل التسديد", color: COLORS.blue, reasonLabel: "نوع التسديد (اختياري)", reasonPlaceholder: "مثال: تسديد جزئي" },
-  expense: { title: "مصروف", editTitle: "تعديل المصروف", color: COLORS.red, reasonLabel: "النوع (اختياري)", reasonPlaceholder: "مثال: بنزين" },
-};
+  const filtered = useMemo(() => {
+    const today = new Date().toDateString();
+    const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const month = new Date(); month.setDate(1); month.setHours(0,0,0,0);
+    if (filter === "today") return expenses.filter(e => new Date(e.createdAt).toDateString() === today);
+    if (filter === "week") return expenses.filter(e => e.createdAt >= week);
+    if (filter === "month") return expenses.filter(e => e.createdAt >= month.getTime());
+    return expenses;
+  }, [expenses, filter]);
 
-function SimpleForm({ type, company, companies, data, editingEntry, onBack, onSave }) {
-  const cfg = FORM_CONFIG[type];
-  const e = editingEntry;
-  const isDual = type === "expense" || type === "debt";
-  const hasDirection = type === "debt";
-  const rate = data.exchangeRate || 1;
-  const [companyId, setCompanyId] = useState(e ? e.companyId : company.id);
-  const [direction, setDirection] = useState(e ? e.direction||"owedToMe" : "owedToMe");
-  const [amount, setAmount] = useState(e ? String(e.rawUSD!=null?e.rawUSD:e.amountUSD||"") : "");
-  const [amountLBP, setAmountLBP] = useState(e ? String((e.amountLBP||0)/1000||"") : "");
-  const [reason, setReason] = useState(e ? e.reason||"" : "");
-  const [note, setNote] = useState(e ? e.note||"" : "");
-  const [dateTime, setDateTime] = useState(e ? toDatetimeLocal(e.createdAt) : toDatetimeLocal(Date.now()));
-  const amtUSD = parseFloat(amount)||0;
-  const amtLBPReal = isDual ? (parseFloat(amountLBP)||0)*1000 : 0;
-  const amtTotalUSD = amtUSD + amtLBPReal/rate;
-  const valid = amtTotalUSD > 0;
-  const save = () => onSave({ id: e?e.id:uid(), companyId, type, direction: hasDirection?direction:undefined, amountUSD: isDual?amtTotalUSD:amtUSD, amountLBP: isDual?amtLBPReal:0, rawUSD: amtUSD, reason: reason.trim(), note: note.trim(), createdAt: new Date(dateTime).getTime()||Date.now() });
-  return (
-    <div>
-      <TopBar title={e ? cfg.editTitle : cfg.title} onBack={onBack} />
-      <div style={{ padding: "0 16px" }}>
-        {companies.length > 1 && <Field label="الشركة"><select style={{ ...inputStyle, appearance: "none" }} value={companyId} onChange={(ev) => setCompanyId(ev.target.value)}>{companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>}
-        {hasDirection && <Field label="نوع الدين"><div style={{ display: "flex", gap: 8 }}><button onClick={() => setDirection("owedToMe")} style={{ flex: 1, padding: "12px", borderRadius: 10, border: "none", fontWeight: 700, cursor: "pointer", background: direction==="owedToMe"?COLORS.green:COLORS.bgCard2, color: direction==="owedToMe"?"#fff":COLORS.textDim }}>دين لي (على الشركة)</button><button onClick={() => setDirection("owedByMe")} style={{ flex: 1, padding: "12px", borderRadius: 10, border: "none", fontWeight: 700, cursor: "pointer", background: direction==="owedByMe"?COLORS.red:COLORS.bgCard2, color: direction==="owedByMe"?"#fff":COLORS.textDim }}>دين عليّ</button></div></Field>}
-        {isDual ? <DualCurrencyField label="المبلغ" usd={amount} lbp={amountLBP} onUsdChange={setAmount} onLbpChange={setAmountLBP} /> : <Field label="المبلغ ($)"><input style={inputStyle} type="number" inputMode="decimal" value={amount} onChange={(ev) => setAmount(ev.target.value)} placeholder="0.00" autoFocus /></Field>}
-        <Field label={cfg.reasonLabel}><input style={inputStyle} value={reason} onChange={(ev) => setReason(ev.target.value)} placeholder={cfg.reasonPlaceholder} /></Field>
-        <Field label="ملاحظات (اختياري)"><input style={inputStyle} value={note} onChange={(ev) => setNote(ev.target.value)} placeholder="ملاحظات إضافية" /></Field>
-        <Field label="التاريخ والوقت"><input style={inputStyle} type="datetime-local" value={dateTime} onChange={(ev) => setDateTime(ev.target.value)} /></Field>
-        <SaveButton disabled={!valid} onClick={save} color={cfg.color} label={e ? "حفظ التعديلات" : "حفظ"} />
-      </div>
-    </div>
-  );
-}
+  const totalUSD = filtered.filter(e => e.currency === "usd").reduce((s,e) => s + (e.amount||0), 0);
+  const totalLBP = filtered.filter(e => e.currency === "lbp").reduce((s,e) => s + (e.amount||0)*1000, 0);
 
-function CloseAccountScreen({ company, data, persist, onBack, showToast, onDone }) {
-  const s = computeCompanyStats(data, company.id);
-  const doClose = () => { persist((prev) => ({ ...prev, closures: [...prev.closures, { id: uid(), companyId: company.id, date: Date.now(), profit: s.profit, debt: s.debt, expense: s.expense, tips: s.tips }] })); showToast("تم تسكير الحساب"); onDone(); };
-  return (
-    <div>
-      <TopBar title="تسكير حساب" onBack={onBack} />
-      <div style={{ padding: "0 16px" }}>
-        <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 18, marginBottom: 18 }}>
-          <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 14 }}>ملخص حساب {company.name}</div>
-          <Row label="الأرباح" value={`$${fmt(s.profit)}`} valueColor={COLORS.green} />
-          <div style={{ height: 8 }} /><Row label="المصروف" value={`$${fmt(s.expense)}`} valueColor={COLORS.red} />
-          <div style={{ height: 8 }} /><Row label="الدين الحالي" value={`$${fmt(s.debt)}`} valueColor={COLORS.orange} />
-          <div style={{ height: 8 }} /><Row label="التيبس" value={`$${fmt(s.tips)}`} valueColor={COLORS.purple} />
-        </div>
-        <SaveButton label="تأكيد تسكير الحساب" color={COLORS.bgCard2} onClick={doClose} />
-      </div>
-    </div>
-  );
-}
-
-function ConvertScreen({ data, persist, onBack, showToast }) {
-  const [amount, setAmount] = useState("");
-  const [direction, setDirection] = useState("usd_to_lbp");
-  const rate = data.exchangeRate || 1;
-  const amt = parseFloat(amount) || 0;
-  const amtForCalc = direction === "lbp_to_usd" ? amt * 1000 : amt;
-  const result = direction === "usd_to_lbp" ? amtForCalc * rate : amtForCalc / rate;
-  const valid = amtForCalc > 0;
-  const confirm = () => {
-    const entry = direction === "usd_to_lbp" ? { id: uid(), type: "convert", companyId: null, fromUSD: amtForCalc, toLBP: result, fromLBP: 0, toUSD: 0, createdAt: Date.now() } : { id: uid(), type: "convert", companyId: null, fromLBP: amtForCalc, toUSD: result, fromUSD: 0, toLBP: 0, createdAt: Date.now() };
-    persist((prev) => ({ ...prev, entries: [...prev.entries, entry] }));
-    showToast("تم تأكيد التحويل"); setAmount("");
-  };
-  return (
-    <div>
-      <TopBar title="تحويل العملة" onBack={onBack} />
-      <div style={{ padding: "0 16px" }}>
-        <div style={{ textAlign: "center", color: COLORS.textDim, fontSize: 13, marginBottom: 18 }}>سعر الصرف الحالي: 1$ = {fmtLBP(rate)} ل.ل</div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 18, background: COLORS.bgCard2, borderRadius: 12, padding: 4 }}>
-          <button onClick={() => setDirection("usd_to_lbp")} style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", fontWeight: 700, cursor: "pointer", background: direction==="usd_to_lbp"?COLORS.green:"transparent", color: direction==="usd_to_lbp"?"#fff":COLORS.textDim }}>دولار ← ليرة</button>
-          <button onClick={() => setDirection("lbp_to_usd")} style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", fontWeight: 700, cursor: "pointer", background: direction==="lbp_to_usd"?COLORS.blue:"transparent", color: direction==="lbp_to_usd"?"#fff":COLORS.textDim }}>ليرة ← دولار</button>
-        </div>
-        <Field label={direction==="usd_to_lbp"?"المبلغ بالدولار":"المبلغ بالليرة (بالألف)"}><input style={inputStyle} type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" autoFocus /></Field>
-        <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 20, textAlign: "center", marginBottom: 16 }}>
-          <div style={{ fontSize: 13, color: COLORS.textDim, marginBottom: 8 }}>النتيجة</div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: direction==="usd_to_lbp"?COLORS.blue:COLORS.green }}>{direction==="usd_to_lbp"?`${fmtLBP(result)} ل.ل`:`$${fmt(result)}`}</div>
-        </div>
-        <SaveButton label="تأكيد التحويل" onClick={confirm} disabled={!valid} />
-      </div>
-    </div>
-  );
-}
-
-function ReportsScreen({ data }) {
-  const [period, setPeriod] = useState("day");
-  const [refDate, setRefDate] = useState(new Date());
-  const range = useMemo(() => {
-    const d = new Date(refDate);
-    let start, end;
-    if (period==="day") { start=new Date(d.setHours(0,0,0,0)); end=new Date(d.setHours(23,59,59,999)); }
-    else if (period==="week") { const day=d.getDay(); start=new Date(d); start.setDate(d.getDate()-day); start.setHours(0,0,0,0); end=new Date(start); end.setDate(start.getDate()+6); end.setHours(23,59,59,999); }
-    else if (period==="month") { start=new Date(d.getFullYear(),d.getMonth(),1); end=new Date(d.getFullYear(),d.getMonth()+1,0,23,59,59,999); }
-    else { start=new Date(d.getFullYear(),0,1); end=new Date(d.getFullYear(),11,31,23,59,59,999); }
-    return { start, end };
-  }, [period, refDate]);
-  const filtered = data.entries.filter((e) => e.createdAt >= range.start.getTime() && e.createdAt <= range.end.getTime());
-  let profit=0, expense=0, debt=0, tips=0, dueToCompany=0;
-  filtered.forEach((e) => { if(e.type==="order"){profit+=e.profitTotalUSD||0;tips+=e.tipsTotalUSD||0;dueToCompany+=e.dueToCompanyUSD||0;} else if(e.type==="debt")debt+=e.amountUSD; else if(e.type==="repay")debt-=e.amountUSD; else if(e.type==="expense")expense+=e.amountUSD; });
-  const net = profit - expense;
-  const shift = (dir) => { const d=new Date(refDate); if(period==="day")d.setDate(d.getDate()+dir); else if(period==="week")d.setDate(d.getDate()+dir*7); else if(period==="month")d.setMonth(d.getMonth()+dir); else d.setFullYear(d.getFullYear()+dir); setRefDate(d); };
-  const label = useMemo(() => {
-    if(period==="day") return range.start.toLocaleDateString("ar-LB",{year:"numeric",month:"2-digit",day:"2-digit"});
-    if(period==="week") return `${range.start.toLocaleDateString("ar-LB",{month:"2-digit",day:"2-digit"})} - ${range.end.toLocaleDateString("ar-LB",{month:"2-digit",day:"2-digit"})}`;
-    if(period==="month") return range.start.toLocaleDateString("ar-LB",{year:"numeric",month:"long"});
-    return range.start.getFullYear().toString();
-  }, [period, range]);
-  return (
-    <div style={{ padding: "16px 16px 0" }}>
-      <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 16 }}>التقارير</div>
-      <div style={{ display: "flex", gap: 6, marginBottom: 16, background: COLORS.bgCard2, borderRadius: 12, padding: 4 }}>
-        {[{k:"day",l:"يومي"},{k:"week",l:"أسبوعي"},{k:"month",l:"شهري"},{k:"year",l:"سنوي"}].map((p) => <button key={p.k} onClick={() => setPeriod(p.k)} style={{ flex:1, padding:"9px 4px", borderRadius:9, border:"none", fontWeight:700, fontSize:13, cursor:"pointer", background:period===p.k?COLORS.yellow:"transparent", color:period===p.k?"#111":COLORS.textDim }}>{p.l}</button>)}
-      </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, background: COLORS.bgCard, borderRadius: 12, padding: "10px 14px", border: `1px solid ${COLORS.border}` }}>
-        <button onClick={() => shift(-1)} style={{ background:"none", border:"none", color:COLORS.text, cursor:"pointer" }}><ChevronRightIcon size={20} /></button>
-        <div style={{ fontWeight: 700, fontSize: 14 }}>{label}</div>
-        <button onClick={() => shift(1)} style={{ background:"none", border:"none", color:COLORS.text, cursor:"pointer" }}><ChevronLeft size={20} /></button>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-        <StatBox label="إجمالي الأرباح" value={profit} color={COLORS.green} />
-        <StatBox label="إجمالي المصروف" value={expense} color={COLORS.red} />
-        <StatBox label="إجمالي الديون" value={debt} color={COLORS.orange} />
-        <StatBox label="إجمالي التيبس" value={tips} color={COLORS.purple} />
-        <StatBox label="مرتب للشركة" value={dueToCompany} color={COLORS.yellow} />
-      </div>
-      <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 18, textAlign: "center" }}>
-        <div style={{ fontSize: 13, color: COLORS.textDim, marginBottom: 6 }}>الربح الصافي (أرباح - مصروف)</div>
-        <div style={{ fontSize: 26, fontWeight: 800, color: net>=0?COLORS.green:COLORS.red }}>${fmt(net)}</div>
-      </div>
-      {filtered.length === 0 && <div style={{ textAlign: "center", color: COLORS.textFaint, padding: "30px 0", fontSize: 14 }}>لا توجد عمليات في هذه الفترة</div>}
-    </div>
-  );
-}
-
-function SettingsScreen({ data, persist, onBack, showToast, onLogout }) {
-  const [editingRate, setEditingRate] = useState(false);
-  const [rateInput, setRateInput] = useState(data.exchangeRate.toString());
-  const [editingAuth, setEditingAuth] = useState(false);
-  const [newUsername, setNewUsername] = useState(data.auth?.username || "admin");
-  const [newPassword, setNewPassword] = useState("");
-  const [showPass, setShowPass] = useState(false);
-
-  const saveRate = () => { const r=parseFloat(rateInput); if(r>0){persist((prev)=>({...prev,exchangeRate:r}));} setEditingRate(false); };
-  const saveAuth = () => {
-    if (!newUsername.trim() || !newPassword.trim()) { showToast("أدخل اسم المستخدم وكلمة المرور"); return; }
-    persist((prev) => ({ ...prev, auth: { username: newUsername.trim(), password: newPassword } }));
-    showToast("تم تغيير بيانات الدخول"); setEditingAuth(false); setNewPassword("");
-  };
-  const recalcAll = () => {
-    persist((prev) => ({ ...prev, entries: prev.entries.map((e) => {
-      if(e.type!=="order") return e;
-      const rate=prev.exchangeRate||1;
-      const orderValueTotalUSD=(e.orderValueUSD||0)+(e.orderValueLBP||0)/rate;
-      const profitTotalUSD=(e.profitUSD||0)+(e.profitLBP||0)/rate;
-      const dueToCompanyUSD=orderValueTotalUSD-profitTotalUSD;
-      const paidTotalUSD=(e.paidUSD||0)+(e.paidLBP||0)/rate;
-      const tipsTotalUSD=Math.max(0,paidTotalUSD-profitTotalUSD-dueToCompanyUSD);
-      return {...e,orderValueTotalUSD,profitTotalUSD,dueToCompanyUSD,paidTotalUSD,tipsUSD:tipsTotalUSD,tipsLBP:tipsTotalUSD*rate,tipsTotalUSD};
-    })}));
-    showToast("تم تحديث كل العمليات");
+  const deleteExpense = (id) => {
+    const exp = expenses.find(e => e.id === id);
+    if (!exp) return;
+    persist((prev) => {
+      const newBalanceUSD = exp.currency === "usd" ? (prev.balanceUSD||0) + (exp.amount||0) : prev.balanceUSD||0;
+      const newBalanceLBP = exp.currency === "lbp" ? (prev.balanceLBP||0) + (exp.amount||0)*1000 : prev.balanceLBP||0;
+      return { ...prev, expenses: prev.expenses.filter(e => e.id !== id), balanceUSD: newBalanceUSD, balanceLBP: newBalanceLBP };
+    });
+    showToast("تم حذف المصروف");
   };
 
   return (
-    <div style={{ padding: "16px 16px 0" }}>
-      <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 18 }}>الإعدادات</div>
-      <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 14 }}>
-        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>بيانات تسجيل الدخول</div>
-        {editingAuth ? (
+    <div>
+      <TopBar title="المصروفات" right={
+        <button onClick={() => goTo("expenses","add")} style={{ background: COLORS.red, border: "none", borderRadius: 10, padding: "8px 12px", color: "#fff", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>+ جديد</button>
+      } />
+      <div style={{ padding: "0 16px" }}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 16, background: COLORS.bgCard2, borderRadius: 12, padding: 4 }}>
+          {[{k:"all",l:"الكل"},{k:"today",l:"اليوم"},{k:"week",l:"الأسبوع"},{k:"month",l:"الشهر"}].map(f => (
+            <button key={f.k} onClick={() => setFilter(f.k)} style={{ flex:1, padding:"8px 4px", borderRadius:9, border:"none", fontWeight:700, fontSize:12, cursor:"pointer", background:filter===f.k?COLORS.red:"transparent", color:filter===f.k?"#fff":COLORS.textDim }}>{f.l}</button>
+          ))}
+        </div>
+
+        <div style={{ background: COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:12, color:COLORS.textDim, marginBottom:4 }}>إجمالي المصروفات</div>
+            <div style={{ fontSize:22, fontWeight:800, color:COLORS.red }}>${fmt(totalUSD)}</div>
+            {totalLBP > 0 && <div style={{ fontSize:13, color:COLORS.blue, marginTop:2 }}>{fmtLBP(totalLBP)} ل.ل</div>}
+          </div>
+          <div style={{ fontSize:36 }}>💸</div>
+        </div>
+
+        {filtered.length === 0 && <div style={{ textAlign:"center", color:COLORS.textFaint, padding:"40px 0" }}>لا توجد مصروفات</div>}
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {[...filtered].sort((a,b) => b.createdAt - a.createdAt).map(exp => (
+            <ExpenseCard key={exp.id} expense={exp} onDelete={() => deleteExpense(exp.id)} onEdit={() => onEdit(exp)} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExpenseCard({ expense, onDelete, onEdit }) {
+  const [open, setOpen] = useState(false);
+  const isUSD = expense.currency === "usd";
+  const dt = new Date(expense.createdAt);
+  return (
+    <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:14, overflow:"hidden" }}>
+      <div onClick={() => setOpen(o=>!o)} style={{ padding:"12px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <div style={{ width:40, height:40, borderRadius:10, background:`${COLORS.red}20`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>💸</div>
+          <div>
+            <div style={{ fontWeight:700, fontSize:14 }}>{expense.category || "مصروف"}</div>
+            <div style={{ fontSize:11, color:COLORS.textFaint }}>{dt.toLocaleDateString("ar-LB")} · {dt.toLocaleTimeString("ar-LB",{hour:"2-digit",minute:"2-digit"})}</div>
+          </div>
+        </div>
+        <div style={{ fontWeight:800, color:COLORS.red, fontSize:15 }}>
+          {isUSD ? `-$${fmt(expense.amount)}` : `-${fmt(expense.amount)} ألف ل.ل`}
+        </div>
+      </div>
+      {open && (
+        <div style={{ borderTop:`1px solid ${COLORS.border}`, padding:"12px 14px", display:"flex", flexDirection:"column", gap:6 }}>
+          <Row label="النوع" value={expense.category||""} />
+          <Row label="المبلغ" value={isUSD ? `$${fmt(expense.amount)}` : `${fmt(expense.amount)} ألف ل.ل`} valueColor={COLORS.red} />
+          {expense.note && <Row label="ملاحظات" value={expense.note} />}
+          <div style={{ display:"flex", gap:10, marginTop:6 }}>
+            <button onClick={onEdit} style={{ background:"none", border:"none", color:COLORS.blue, fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}><Edit3 size={14}/> تعديل</button>
+            <button onClick={onDelete} style={{ background:"none", border:"none", color:COLORS.red, fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}><Trash2 size={14}/> حذف</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExpenseForm({ data, persist, showToast, editing, onBack, rate }) {
+  const e = editing;
+  const [currency, setCurrency] = useState(e?.currency || "usd");
+  const [amount, setAmount] = useState(e ? String(e.amount||"") : "");
+  const [category, setCategory] = useState(e?.category || "");
+  const [note, setNote] = useState(e?.note || "");
+
+  const categories = ["بنزين","أكل","صيانة","إنترنت","كهرباء","إيجار","أخرى"];
+  const valid = parseFloat(amount) > 0;
+
+  const save = () => {
+    const amt = parseFloat(amount) || 0;
+    const expense = { id: e?e.id:uid(), currency, amount: amt, category: category.trim(), note: note.trim(), createdAt: e?e.createdAt:Date.now() };
+    persist((prev) => {
+      let newBalanceUSD = prev.balanceUSD || 0;
+      let newBalanceLBP = prev.balanceLBP || 0;
+      if (e) {
+        if (e.currency === "usd") newBalanceUSD += e.amount || 0;
+        else newBalanceLBP += (e.amount||0) * 1000;
+      }
+      if (currency === "usd") newBalanceUSD -= amt;
+      else newBalanceLBP -= amt * 1000;
+      const expenses = e ? prev.expenses.map(ex => ex.id===e.id ? expense : ex) : [...(prev.expenses||[]), expense];
+      return { ...prev, expenses, balanceUSD: newBalanceUSD, balanceLBP: newBalanceLBP };
+    });
+    showToast(e ? "تم تعديل المصروف ✓" : "تم حفظ المصروف ✓");
+    onBack();
+  };
+
+  return (
+    <div>
+      <TopBar title={e ? "تعديل المصروف" : "إضافة مصروف"} onBack={onBack} />
+      <div style={{ padding:"0 16px" }}>
+        <Field label="العملة"><CurrencyToggle value={currency} onChange={setCurrency} /></Field>
+        <Field label={currency==="usd"?"المبلغ ($)":"المبلغ (ألف ل.ل)"}><AmountInput currency={currency} value={amount} onChange={setAmount} /></Field>
+        <Field label="النوع / الفئة">
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:8 }}>
+            {categories.map(c => (
+              <button key={c} onClick={() => setCategory(c)} style={{ padding:"8px 14px", borderRadius:20, border:`1px solid ${category===c?COLORS.red:COLORS.border}`, background:category===c?`${COLORS.red}20`:"transparent", color:category===c?COLORS.red:COLORS.textDim, fontWeight:600, fontSize:13, cursor:"pointer" }}>{c}</button>
+            ))}
+          </div>
+          <input style={inputStyle} value={category} onChange={e=>setCategory(e.target.value)} placeholder="أو اكتب نوع مخصص..." />
+        </Field>
+        <Field label="ملاحظات (اختياري)"><input style={inputStyle} value={note} onChange={e=>setNote(e.target.value)} placeholder="ملاحظات..." /></Field>
+        <SaveBtn disabled={!valid} onClick={save} color={COLORS.red} label={e?"حفظ التعديلات":"حفظ المصروف"} />
+      </div>
+    </div>
+  );
+}
+
+// الديون الشخصية
+function DebtsScreen({ data, persist, showToast, goTo, rate, onEdit, onPay }) {
+  const debts = data.personalDebts || [];
+  const owedToMe = debts.filter(d => d.direction === "owedToMe");
+  const owedByMe = debts.filter(d => d.direction === "owedByMe");
+
+  const totalOwedToMeUSD = owedToMe.filter(d=>d.currency==="usd").reduce((s,d) => { const paid=(d.payments||[]).reduce((a,p)=>a+(p.amount||0),0); return s+Math.max(0,d.amount-paid); }, 0);
+  const totalOwedByMeUSD = owedByMe.filter(d=>d.currency==="usd").reduce((s,d) => { const paid=(d.payments||[]).reduce((a,p)=>a+(p.amount||0),0); return s+Math.max(0,d.amount-paid); }, 0);
+  const totalOwedToMeLBP = owedToMe.filter(d=>d.currency==="lbp").reduce((s,d) => { const paid=(d.payments||[]).reduce((a,p)=>a+(p.amount||0),0); return s+Math.max(0,d.amount-paid)*1000; }, 0);
+  const totalOwedByMeLBP = owedByMe.filter(d=>d.currency==="lbp").reduce((s,d) => { const paid=(d.payments||[]).reduce((a,p)=>a+(p.amount||0),0); return s+Math.max(0,d.amount-paid)*1000; }, 0);
+
+  const deleteDebt = (id) => {
+    persist((prev) => ({ ...prev, personalDebts: (prev.personalDebts||[]).filter(d=>d.id!==id) }));
+    showToast("تم حذف الدين");
+  };
+
+  return (
+    <div>
+      <TopBar title="الديون الشخصية" right={
+        <button onClick={() => goTo("debts","add")} style={{ background:COLORS.orange, border:"none", borderRadius:10, padding:"8px 12px", color:"#fff", fontWeight:700, cursor:"pointer", fontSize:13 }}>+ جديد</button>
+      } />
+      <div style={{ padding:"0 16px" }}>
+        <div style={{ display:"flex", gap:10, marginBottom:16 }}>
+          <div style={{ flex:1, background:`${COLORS.green}15`, border:`1px solid ${COLORS.green}30`, borderRadius:16, padding:"14px 12px", textAlign:"center" }}>
+            <div style={{ color:COLORS.green, fontSize:11, fontWeight:700, marginBottom:4 }}>💰 ديون لي</div>
+            <div style={{ color:COLORS.text, fontSize:18, fontWeight:800 }}>${fmt(totalOwedToMeUSD)}</div>
+            {totalOwedToMeLBP > 0 && <div style={{ fontSize:11, color:COLORS.blue }}>{fmtLBP(totalOwedToMeLBP)} ل.ل</div>}
+          </div>
+          <div style={{ flex:1, background:`${COLORS.red}15`, border:`1px solid ${COLORS.red}30`, borderRadius:16, padding:"14px 12px", textAlign:"center" }}>
+            <div style={{ color:COLORS.red, fontSize:11, fontWeight:700, marginBottom:4 }}>💸 ديون عليّ</div>
+            <div style={{ color:COLORS.text, fontSize:18, fontWeight:800 }}>${fmt(totalOwedByMeUSD)}</div>
+            {totalOwedByMeLBP > 0 && <div style={{ fontSize:11, color:COLORS.blue }}>{fmtLBP(totalOwedByMeLBP)} ل.ل</div>}
+          </div>
+        </div>
+
+        <button onClick={() => goTo("debts","add")} style={{ width:"100%", background:`${COLORS.orange}20`, border:`1px solid ${COLORS.orange}40`, borderRadius:14, padding:"14px", color:COLORS.orange, fontSize:15, fontWeight:800, cursor:"pointer", marginBottom:16, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+          <Plus size={18}/> إضافة دين شخصي
+        </button>
+
+        {owedToMe.length > 0 && (
           <>
-            <Field label="اسم المستخدم الجديد"><input style={inputStyle} value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder="اسم المستخدم" /></Field>
-            <Field label="كلمة المرور الجديدة">
-              <div style={{ position: "relative" }}>
-                <input style={inputStyle} type={showPass ? "text" : "password"} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="كلمة المرور الجديدة" />
-                <button onClick={() => setShowPass(s => !s)} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: COLORS.textDim, cursor: "pointer" }}>{showPass ? <EyeOff size={18} /> : <Eye size={18} />}</button>
-              </div>
-            </Field>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={saveAuth} style={{ flex: 1, background: COLORS.green, border: "none", borderRadius: 10, padding: "12px", color: "#fff", fontWeight: 700, cursor: "pointer" }}>حفظ</button>
-              <button onClick={() => setEditingAuth(false)} style={{ flex: 1, background: COLORS.bgCard2, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "12px", color: COLORS.text, fontWeight: 700, cursor: "pointer" }}>إلغاء</button>
+            <div style={{ fontSize:14, fontWeight:800, color:COLORS.green, marginBottom:8 }}>💰 ديون لي</div>
+            <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>
+              {owedToMe.map(d => <DebtCard key={d.id} debt={d} onDelete={()=>deleteDebt(d.id)} onEdit={()=>onEdit(d)} onPay={()=>onPay(d)} />)}
             </div>
           </>
-        ) : (
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ fontSize: 14, color: COLORS.textDim }}>المستخدم: <span style={{ color: COLORS.text, fontWeight: 700 }}>{data.auth?.username || "admin"}</span></div>
-            <button onClick={() => setEditingAuth(true)} style={{ background: "none", border: "none", color: COLORS.blue, cursor: "pointer", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}><Edit3 size={14} /> تغيير</button>
-          </div>
         )}
-      </div>
-      <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 14 }}>
-        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>سعر صرف الدولار</div>
-        {editingRate ? (
-          <div style={{ display: "flex", gap: 8 }}>
-            <input style={{ ...inputStyle, flex: 1 }} type="number" value={rateInput} onChange={(e) => setRateInput(e.target.value)} autoFocus />
-            <button onClick={saveRate} style={{ background: COLORS.green, border: "none", borderRadius: 10, padding: "0 16px", color: "#fff", cursor: "pointer" }}><Check size={18} /></button>
-          </div>
-        ) : (
-          <button onClick={() => { setRateInput(data.exchangeRate.toString()); setEditingRate(true); }} style={{ display: "flex", justifyContent: "space-between", width: "100%", background: COLORS.bgCard2, border: "none", borderRadius: 10, padding: "12px 14px", color: COLORS.text, cursor: "pointer", fontSize: 15 }}>
-            <span>1$ = {fmtLBP(data.exchangeRate)} ل.ل</span>
-            <Edit3 size={16} color={COLORS.textDim} />
-          </button>
+
+        {owedByMe.length > 0 && (
+          <>
+            <div style={{ fontSize:14, fontWeight:800, color:COLORS.red, marginBottom:8 }}>💸 ديون عليّ</div>
+            <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>
+              {owedByMe.map(d => <DebtCard key={d.id} debt={d} onDelete={()=>deleteDebt(d.id)} onEdit={()=>onEdit(d)} onPay={()=>onPay(d)} />)}
+            </div>
+          </>
         )}
-      </div>
-      <div style={{ background: COLORS.bgCard, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, marginBottom: 14 }}>
-        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>إعادة حساب كل العمليات</div>
-        <div style={{ fontSize: 12, color: COLORS.textFaint, marginBottom: 12, lineHeight: 1.6 }}>يحدّث التيبس والمرتب لكل العمليات القديمة بسعر الصرف الحالي.</div>
-        <button onClick={recalcAll} style={{ width: "100%", background: COLORS.bgCard2, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "12px", color: COLORS.text, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontWeight: 700, cursor: "pointer" }}><RefreshCw size={16} /> إعادة حساب الآن</button>
-      </div>
-      <button onClick={onLogout} style={{ width: "100%", background: COLORS.red, border: "none", borderRadius: 14, padding: "14px", color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer", marginBottom: 14 }}>تسجيل الخروج</button>
-      <div style={{ background: "#1a2230", border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16, fontSize: 13, color: COLORS.textDim, lineHeight: 1.7 }}>
-        <div style={{ fontWeight: 800, color: COLORS.text, marginBottom: 8 }}>ملاحظات مهمة</div>
-        • البيانات تُحفظ محلياً على هذا الجهاز تلقائياً<br />
-        • يمكنك تغيير سعر الصرف في أي وقت من هنا<br />
-        • تسكير الحساب لا يحذف البيانات، فقط يحفظ نسخة من الملخص
+
+        {debts.length === 0 && <div style={{ textAlign:"center", color:COLORS.textFaint, padding:"40px 0" }}>لا توجد ديون شخصية</div>}
       </div>
     </div>
   );
-                       }
+}
+
+function DebtCard({ debt, onDelete, onEdit, onPay }) {
+  const [open, setOpen] = useState(false);
+  const isUSD = debt.currency === "usd";
+  const paid = (debt.payments||[]).reduce((s,p)=>s+(p.amount||0),0);
+  const remaining = Math.max(0, debt.amount - paid);
+  const isSettled = remaining <= 0;
+  const color = debt.direction === "owedToMe" ? COLORS.green : COLORS.red;
+
+  return (
+    <div style={{ background:COLORS.bgCard, border:`1px solid ${isSettled?COLORS.green:COLORS.border}`, borderRadius:14, overflow:"hidden", opacity:isSettled?0.75:1 }}>
+      <div onClick={()=>setOpen(o=>!o)} style={{ padding:"12px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <div style={{ width:40, height:40, borderRadius:10, background:`${color}20`, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, color:"#fff", fontSize:18, fontFamily:"inherit" }}>
+            <div style={{ width:36, height:36, borderRadius:9, background:color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:800 }}>{debt.name.slice(0,1)}</div>
+          </div>
+          <div>
+            <div style={{ fontWeight:700, fontSize:14 }}>{debt.name}</div>
+            <div style={{ fontSize:11, color:COLORS.textFaint }}>{isSettled?"✅ مسدّد":`متبقي: ${isUSD?`$${fmt(remaining)}`:`${fmt(remaining)} ألف ل.ل`}`}</div>
+          </div>
+        </div>
+        <div style={{ fontWeight:800, color, fontSize:15 }}>{isUSD?`$${fmt(debt.amount)}`:`${fmt(debt.amount)} ألف ل.ل`}</div>
+      </div>
+      {open && (
+        <div style={{ borderTop:`1px solid ${COLORS.border}`, padding:"12px 14px", display:"flex", flexDirection:"column", gap:6 }}>
+          <Row label="المبلغ الكلي" value={isUSD?`$${fmt(debt.amount)}`:`${fmt(debt.amount)} ألف ل.ل`} valueColor={color} />
+          <Row label="المدفوع" value={isUSD?`$${fmt(paid)}`:`${fmt(paid)} ألف ل.ل`} valueColor={COLORS.green} />
+          <Row label="المتبقي" value={isUSD?`$${fmt(remaining)}`:`${fmt(remaining)} ألف ل.ل`} valueColor={remaining>0?COLORS.orange:COLORS.green} />
+          {debt.note && <Row label="ملاحظة" value={debt.note} />}
+          {(debt.payments||[]).length > 0 && (
+            <div style={{ marginTop:6 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:COLORS.textDim, marginBottom:4 }}>الدفعات:</div>
+              {debt.payments.map((p,i) => (
+                <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"2px 0" }}>
+                  <span style={{ color:COLORS.textFaint }}>{new Date(p.date).toLocaleDateString("ar-LB")}</span>
+                  <span style={{ color:COLORS.green, fontWeight:700 }}>{isUSD?`$${fmt(p.amount)}`:`${fmt(p.amount)} ألف ل.ل`}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display:"flex", gap:10, marginTop:8 }}>
+            {!isSettled && <button onClick={onPay} style={{ flex:1, background:COLORS.blue, border:"none", borderRadius:8, padding:"9px", color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer" }}>تسديد دفعة</button>}
+            <button onClick={onEdit} style={{ background:"none", border:"none", color:COLORS.blue, fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}><Edit3 size={14}/> تعديل</button>
+            <button onClick={onDelete} style={{ background:"none", border:"none", color:COLORS.red, fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}><Trash2 size={14}/> حذف</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DebtForm({ data, persist, showToast, editing, onBack, rate }) {
+  const e = editing;
+  const [currency, setCurrency] = useState(e?.currency||"usd");
+  const [direction, setDirection] = useState(e?.direction||"owedToMe");
+  const [name, setName] = useState(e?.name||"");
+  const [amount, setAmount] = useState(e?String(e.amount||""):"");
+  const [note, setNote] = useState(e?.note||"");
+
+  const valid = name.trim() && parseFloat(amount) > 0;
+
+  const save = () => {
+    const amt = parseFloat(amount) || 0;
+    const debt = { id:e?e.id:uid(), currency, direction, name:name.trim(), amount:amt, note:note.trim(), createdAt:e?e.createdAt:Date.now(), payments:e?e.payments:[] };
+
+    persist((prev) => {
+      let newBalanceUSD = prev.balanceUSD || 0;
+      let newBalanceLBP = prev.balanceLBP || 0;
+
+      if (e) {
+        if (e.currency === "usd") {
+          if (e.direction === "owedToMe") newBalanceUSD -= e.amount||0;
+          else newBalanceUSD += e.amount||0;
+        } else {
+          if (e.direction === "owedToMe") newBalanceLBP -= (e.amount||0)*1000;
+          else newBalanceLBP += (e.amount||0)*1000;
+        }
+      }
+
+      if (currency === "usd") {
+        if (direction === "owedToMe") newBalanceUSD += amt;
+        else newBalanceUSD -= amt;
+      } else {
+        if (direction === "owedToMe") newBalanceLBP += amt*1000;
+        else newBalanceLBP -= amt*1000;
+      }
+
+      const personalDebts = e
+        ? prev.personalDebts.map(d=>d.id===e.id?debt:d)
+        : [...(prev.personalDebts||[]), debt];
+
+      return { ...prev, personalDebts, balanceUSD: newBalanceUSD, balanceLBP: newBalanceLBP };
+    });
+
+    showToast(e?"تم تعديل الدين ✓":"تم إضافة الدين ✓");
+    onBack();
+  };
+
+  return (
+    <div>
+      <TopBar title={e?"تعديل الدين":"إضافة دين شخصي"} onBack={onBack} />
+      <div style={{ padding:"0 16px" }}>
+        <Field label="نوع الدين">
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={()=>setDirection("owedToMe")} style={{ flex:1, padding:"12px", borderRadius:10, border:"none", fontWeight:700, cursor:"pointer", background:direction==="owedToMe"?COLORS.green:COLORS.bgCard2, color:direction==="owedToMe"?"#fff":COLORS.textDim }}>💰 دين لي</button>
+            <button onClick={()=>setDirection("owedByMe")} style={{ flex:1, padding:"12px", borderRadius:10, border:"none", fontWeight:700, cursor:"pointer", background:direction==="owedByMe"?COLORS.red:COLORS.bgCard2, color:direction==="owedByMe"?"#fff":COLORS.textDim }}>💸 دين عليّ</button>
+          </div>
+        </Field>
+        <Field label="العملة"><CurrencyToggle value={currency} onChange={setCurrency} /></Field>
+        <Field label="اسم الشخص"><input style={inputStyle} value={name} onChange={e=>setName(e.target.value)} placeholder="مثال: أحمد" autoFocus /></Field>
+        <Field label={currency==="usd"?"المبلغ ($)":"المبلغ (ألف ل.ل)"}><AmountInput currency={currency} value={amount} onChange={setAmount} /></Field>
+        <Field label="ملاحظة (اختياري)"><input style={inputStyle} value={note} onChange={e=>setNote(e.target.value)} placeholder="سبب الدين..." /></Field>
+
+        <div style={{ background:direction==="owedToMe"?`${COLORS.green}10`:`${COLORS.red}10`, border:`1px solid ${direction==="owedToMe"?COLORS.green:COLORS.red}30`, borderRadius:12, padding:12, marginBottom:8 }}>
+          <div style={{ fontSize:12, color:direction==="owedToMe"?COLORS.green:COLORS.red, fontWeight:700 }}>
+            {direction==="owedToMe" ? "✓ سيُضاف إلى رصيدك الكلي" : "✓ سيُخصم من رصيدك الكلي"}
+          </div>
+        </div>
+
+        <SaveBtn disabled={!valid} onClick={save} color={direction==="owedToMe"?COLORS.green:COLORS.red} label={e?"حفظ التعديلات":"إضافة الدين"} />
+      </div>
+    </div>
+  );
+}
+
+function PayDebtScreen({ debt, persist, showToast, onBack }) {
+  const [amount, setAmount] = useState("");
+  const isUSD = debt.currency === "usd";
+  const paid = (debt.payments||[]).reduce((s,p)=>s+(p.amount||0),0);
+  const remaining = Math.max(0, debt.amount - paid);
+  const valid = parseFloat(amount) > 0 && parseFloat(amount) <= remaining;
+
+  const save = () => {
+    const amt = parseFloat(amount)||0;
+    persist((prev) => {
+      let newBalanceUSD = prev.balanceUSD||0;
+      let newBalanceLBP = prev.balanceLBP||0;
+
+      if (debt.direction === "owedToMe") {
+        if (isUSD) newBalanceUSD -= amt;
+        else newBalanceLBP -= amt*1000;
+      } else {
+        if (isUSD) newBalanceUSD += amt;
+        else newBalanceLBP += amt*1000;
+      }
+
+      return {
+        ...prev,
+        balanceUSD: newBalanceUSD,
+        balanceLBP: newBalanceLBP,
+        personalDebts: prev.personalDebts.map(d =>
+          d.id === debt.id ? { ...d, payments: [...(d.payments||[]), { amount: amt, date: Date.now() }] } : d
+        )
+      };
+    });
+    showToast("تم تسجيل الدفعة ✓");
+    onBack();
+  };
+
+  return (
+    <div>
+      <TopBar title={`تسديد — ${debt.name}`} onBack={onBack} />
+      <div style={{ padding:"0 16px" }}>
+        <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:16 }}>
+          <Row label="المبلغ الكلي" value={isUSD?`$${fmt(debt.amount)}`:`${fmt(debt.amount)} ألف ل.ل`} />
+          <div style={{ height:8 }} />
+          <Row label="المدفوع سابقاً" value={isUSD?`$${fmt(paid)}`:`${fmt(paid)} ألف ل.ل`} valueColor={COLORS.green} />
+          <div style={{ height:8 }} />
+          <Row label="المتبقي" value={isUSD?`$${fmt(remaining)}`:`${fmt(remaining)} ألف ل.ل`} valueColor={COLORS.orange} />
+        </div>
+        <Field label={isUSD?"مبلغ الدفعة ($)":"مبلغ الدفعة (ألف ل.ل)"}>
+          <AmountInput currency={debt.currency} value={amount} onChange={setAmount} />
+        </Field>
+        <SaveBtn disabled={!valid} onClick={save} color={COLORS.blue} label="تسجيل الدفعة" />
+      </div>
+    </div>
+  );
+      }function SettingsScreen({ data, persist, showToast, onLogout, rate }) {
+  const [editingPin, setEditingPin] = useState(false);
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [editingRate, setEditingRate] = useState(false);
+  const [rateInput, setRateInput] = useState(String(data.exchangeRate || 89000));
+  const [showConvert, setShowConvert] = useState(false);
+  const [convertAmount, setConvertAmount] = useState("");
+  const [convertDir, setConvertDir] = useState("usd_to_lbp");
+
+  const savePin = () => {
+    if (newPin.length !== 4) { showToast("PIN لازم يكون 4 أرقام", COLORS.red); return; }
+    if (newPin !== confirmPin) { showToast("PIN غير متطابق", COLORS.red); return; }
+    persist((prev) => ({ ...prev, auth: { ...prev.auth, pin: newPin } }));
+    showToast("تم تغيير PIN ✓");
+    setEditingPin(false); setNewPin(""); setConfirmPin("");
+  };
+
+  const saveRate = () => {
+    const r = parseFloat(rateInput);
+    if (r > 0) { persist((prev) => ({ ...prev, exchangeRate: r })); showToast("تم تحديث سعر الصرف ✓"); }
+    setEditingRate(false);
+  };
+
+  const amt = parseFloat(convertAmount) || 0;
+  const convertResult = convertDir === "usd_to_lbp" ? amt * rate : amt * 1000 / rate;
+
+  const confirmConvert = () => {
+    if (amt <= 0) return;
+    persist((prev) => {
+      let newBalanceUSD = prev.balanceUSD || 0;
+      let newBalanceLBP = prev.balanceLBP || 0;
+      if (convertDir === "usd_to_lbp") {
+        newBalanceUSD -= amt;
+        newBalanceLBP += amt * rate;
+      } else {
+        newBalanceLBP -= amt * 1000;
+        newBalanceUSD += amt * 1000 / rate;
+      }
+      return { ...prev, balanceUSD: newBalanceUSD, balanceLBP: newBalanceLBP };
+    });
+    showToast("تم التحويل ✓");
+    setConvertAmount("");
+  };
+
+  // إحصائيات عامة
+  const totalOrders = (data.orders||[]).length;
+  const totalExpenses = (data.expenses||[]).length;
+  const totalDebts = (data.personalDebts||[]).length;
+  const totalProfitUSD = (data.orders||[]).filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.profit||0),0);
+  const totalProfitLBP = (data.orders||[]).filter(o=>o.currency==="lbp").reduce((s,o)=>s+(o.profit||0)*1000,0);
+  const totalExpUSD = (data.expenses||[]).filter(e=>e.currency==="usd").reduce((s,e)=>s+(e.amount||0),0);
+  const totalExpLBP = (data.expenses||[]).filter(e=>e.currency==="lbp").reduce((s,e)=>s+(e.amount||0)*1000,0);
+
+  return (
+    <div>
+      <TopBar title="الإعدادات" />
+      <div style={{ padding:"0 16px" }}>
+
+        {/* الرصيد الحالي */}
+        <div style={{ background:`linear-gradient(135deg, ${COLORS.bgCard}, ${COLORS.bgCard2})`, border:`1px solid ${COLORS.border}`, borderRadius:18, padding:18, marginBottom:16 }}>
+          <div style={{ fontSize:13, color:COLORS.textDim, fontWeight:700, marginBottom:12 }}>الرصيد الحالي</div>
+          <div style={{ display:"flex", gap:10 }}>
+            <div style={{ flex:1, background:`${COLORS.green}15`, borderRadius:12, padding:"12px 10px", textAlign:"center" }}>
+              <div style={{ fontSize:11, color:COLORS.green, fontWeight:700, marginBottom:4 }}>$ دولار</div>
+              <div style={{ fontSize:18, fontWeight:800, color:COLORS.text }}>${fmt(data.balanceUSD||0)}</div>
+            </div>
+            <div style={{ flex:1, background:`${COLORS.blue}15`, borderRadius:12, padding:"12px 10px", textAlign:"center" }}>
+              <div style={{ fontSize:11, color:COLORS.blue, fontWeight:700, marginBottom:4 }}>ل.ل ليرة</div>
+              <div style={{ fontSize:15, fontWeight:800, color:COLORS.text }}>{fmtLBP(data.balanceLBP||0)}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* تحويل العملة */}
+        <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: showConvert?16:0 }}>
+            <div style={{ fontWeight:800, fontSize:14 }}>🔄 تحويل العملة</div>
+            <button onClick={()=>setShowConvert(s=>!s)} style={{ background:`${COLORS.blue}20`, border:`1px solid ${COLORS.blue}40`, borderRadius:8, padding:"6px 12px", color:COLORS.blue, fontWeight:700, fontSize:13, cursor:"pointer" }}>
+              {showConvert ? "إخفاء" : "فتح"}
+            </button>
+          </div>
+          {showConvert && (
+            <>
+              <div style={{ fontSize:12, color:COLORS.textDim, marginBottom:12, textAlign:"center" }}>1$ = {fmtLBP(rate)} ل.ل</div>
+              <div style={{ display:"flex", gap:8, marginBottom:12, background:COLORS.bgCard2, borderRadius:10, padding:4 }}>
+                <button onClick={()=>setConvertDir("usd_to_lbp")} style={{ flex:1, padding:"9px", borderRadius:8, border:"none", fontWeight:700, cursor:"pointer", background:convertDir==="usd_to_lbp"?COLORS.green:"transparent", color:convertDir==="usd_to_lbp"?"#fff":COLORS.textDim, fontSize:13 }}>$ → ل.ل</button>
+                <button onClick={()=>setConvertDir("lbp_to_usd")} style={{ flex:1, padding:"9px", borderRadius:8, border:"none", fontWeight:700, cursor:"pointer", background:convertDir==="lbp_to_usd"?COLORS.blue:"transparent", color:convertDir==="lbp_to_usd"?"#fff":COLORS.textDim, fontSize:13 }}>ل.ل → $</button>
+              </div>
+              <Field label={convertDir==="usd_to_lbp"?"المبلغ بالدولار":"المبلغ بالليرة (ألف)"}>
+                <input style={inputStyle} type="number" inputMode="decimal" value={convertAmount} onChange={e=>setConvertAmount(e.target.value)} placeholder="0" />
+              </Field>
+              {amt > 0 && (
+                <div style={{ background:COLORS.bgCard2, borderRadius:12, padding:14, marginBottom:12, textAlign:"center" }}>
+                  <div style={{ fontSize:12, color:COLORS.textDim, marginBottom:6 }}>النتيجة</div>
+                  <div style={{ fontSize:22, fontWeight:800, color:convertDir==="usd_to_lbp"?COLORS.blue:COLORS.green }}>
+                    {convertDir==="usd_to_lbp" ? `${fmtLBP(convertResult)} ل.ل` : `$${fmt(convertResult)}`}
+                  </div>
+                </div>
+              )}
+              <SaveBtn onClick={confirmConvert} disabled={amt<=0} label="تأكيد التحويل" color={COLORS.blue} />
+            </>
+          )}
+        </div>
+
+        {/* سعر الصرف */}
+        <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
+          <div style={{ fontWeight:800, fontSize:14, marginBottom:10 }}>💱 سعر الصرف</div>
+          {editingRate ? (
+            <div style={{ display:"flex", gap:8 }}>
+              <input style={{ ...inputStyle, flex:1 }} type="number" value={rateInput} onChange={e=>setRateInput(e.target.value)} autoFocus />
+              <button onClick={saveRate} style={{ background:COLORS.green, border:"none", borderRadius:10, padding:"0 16px", color:"#fff", cursor:"pointer" }}><Check size={18}/></button>
+              <button onClick={()=>setEditingRate(false)} style={{ background:COLORS.bgCard2, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"0 12px", color:COLORS.textDim, cursor:"pointer" }}><X size={18}/></button>
+            </div>
+          ) : (
+            <button onClick={()=>{setRateInput(String(data.exchangeRate||89000));setEditingRate(true);}} style={{ display:"flex", justifyContent:"space-between", width:"100%", background:COLORS.bgCard2, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"12px 14px", color:COLORS.text, cursor:"pointer", fontSize:15 }}>
+              <span>1$ = {fmtLBP(data.exchangeRate||89000)} ل.ل</span>
+              <Edit3 size={16} color={COLORS.textDim}/>
+            </button>
+          )}
+        </div>
+
+        {/* تغيير PIN */}
+        <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
+          <div style={{ fontWeight:800, fontSize:14, marginBottom:10 }}>🔐 رمز PIN</div>
+          {editingPin ? (
+            <>
+              <Field label="PIN الجديد (4 أرقام)">
+                <input style={inputStyle} type="password" maxLength={4} inputMode="numeric" value={newPin} onChange={e=>setNewPin(e.target.value.replace(/\D/g,""))} placeholder="****" />
+              </Field>
+              <Field label="تأكيد PIN">
+                <input style={inputStyle} type="password" maxLength={4} inputMode="numeric" value={confirmPin} onChange={e=>setConfirmPin(e.target.value.replace(/\D/g,""))} placeholder="****" />
+              </Field>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={savePin} style={{ flex:1, background:COLORS.green, border:"none", borderRadius:10, padding:"12px", color:"#fff", fontWeight:700, cursor:"pointer" }}>حفظ</button>
+                <button onClick={()=>{setEditingPin(false);setNewPin("");setConfirmPin("");}} style={{ flex:1, background:COLORS.bgCard2, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"12px", color:COLORS.textDim, fontWeight:700, cursor:"pointer" }}>إلغاء</button>
+              </div>
+            </>
+          ) : (
+            <button onClick={()=>setEditingPin(true)} style={{ display:"flex", justifyContent:"space-between", width:"100%", background:COLORS.bgCard2, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"12px 14px", color:COLORS.text, cursor:"pointer", fontSize:15 }}>
+              <span>تغيير رمز PIN</span>
+              <Edit3 size={16} color={COLORS.textDim}/>
+            </button>
+          )}
+        </div>
+
+        {/* إحصائيات */}
+        <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
+          <div style={{ fontWeight:800, fontSize:14, marginBottom:12 }}>📊 إحصائيات عامة</div>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            <Row label="إجمالي الطلبات" value={`${totalOrders} طلب`} />
+            <Row label="إجمالي الأرباح $" value={`$${fmt(totalProfitUSD)}`} valueColor={COLORS.green} />
+            {totalProfitLBP > 0 && <Row label="إجمالي الأرباح ل.ل" value={`${fmtLBP(totalProfitLBP)} ل.ل`} valueColor={COLORS.blue} />}
+            <Row label="إجمالي المصروفات $" value={`$${fmt(totalExpUSD)}`} valueColor={COLORS.red} />
+            {totalExpLBP > 0 && <Row label="إجمالي المصروفات ل.ل" value={`${fmtLBP(totalExpLBP)} ل.ل`} valueColor={COLORS.red} />}
+            <Row label="الديون الشخصية" value={`${totalDebts} دين`} />
+          </div>
+        </div>
+
+        {/* تعديل الرصيد يدوياً */}
+        <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
+          <div style={{ fontWeight:800, fontSize:14, marginBottom:6 }}>✏️ تعديل الرصيد يدوياً</div>
+          <div style={{ fontSize:12, color:COLORS.textFaint, marginBottom:12, lineHeight:1.6 }}>في حال أردت تصحيح الرصيد الكلي يدوياً</div>
+          <ManualBalanceEditor data={data} persist={persist} showToast={showToast} />
+        </div>
+
+        {/* تسجيل خروج */}
+        <button onClick={onLogout} style={{ width:"100%", background:COLORS.red, border:"none", borderRadius:14, padding:"14px", color:"#fff", fontSize:16, fontWeight:800, cursor:"pointer", marginBottom:14 }}>
+          🔒 قفل التطبيق
+        </button>
+
+        <div style={{ background:"#1a1d27", border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, fontSize:13, color:COLORS.textDim, lineHeight:1.7, marginBottom:20 }}>
+          <div style={{ fontWeight:800, color:COLORS.text, marginBottom:8 }}>ملاحظات مهمة</div>
+          • البيانات تُحفظ محلياً على هذا الجهاز تلقائياً<br/>
+          • كل طلب يُضيف ربحك للرصيد بعملته<br/>
+          • كل مصروف يُخصم من الرصيد بعملته<br/>
+          • الديون تؤثر على الرصيد عند الإضافة والتسديد
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ManualBalanceEditor({ data, persist, showToast }) {
+  const [usd, setUsd] = useState(String(data.balanceUSD||0));
+  const [lbp, setLbp] = useState(String(Math.round((data.balanceLBP||0)/1000)));
+  const [editing, setEditing] = useState(false);
+
+  const save = () => {
+    const newUSD = parseFloat(usd)||0;
+    const newLBP = (parseFloat(lbp)||0)*1000;
+    persist((prev) => ({ ...prev, balanceUSD: newUSD, balanceLBP: newLBP }));
+    showToast("تم تحديث الرصيد ✓");
+    setEditing(false);
+  };
+
+  if (!editing) return (
+    <button onClick={()=>setEditing(true)} style={{ width:"100%", background:COLORS.bgCard2, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"12px 14px", color:COLORS.text, cursor:"pointer", fontSize:14, display:"flex", justifyContent:"space-between" }}>
+      <span>تعديل الرصيد</span>
+      <Edit3 size={16} color={COLORS.textDim}/>
+    </button>
+  );
+
+  return (
+    <>
+      <Field label="الرصيد بالدولار ($)">
+        <div style={{ position:"relative" }}>
+          <input style={{ ...inputStyle, paddingInlineStart:24 }} type="number" value={usd} onChange={e=>setUsd(e.target.value)} />
+          <span style={{ position:"absolute", insetInlineStart:10, top:"50%", transform:"translateY(-50%)", color:COLORS.textDim, fontWeight:700 }}>$</span>
+        </div>
+      </Field>
+      <Field label="الرصيد بالليرة (ألف ل.ل)">
+        <div style={{ position:"relative" }}>
+          <input style={{ ...inputStyle, paddingInlineEnd:50 }} type="number" value={lbp} onChange={e=>setLbp(e.target.value)} />
+          <span style={{ position:"absolute", insetInlineEnd:10, top:"50%", transform:"translateY(-50%)", color:COLORS.textDim, fontSize:11, fontWeight:700 }}>ألف</span>
+        </div>
+        {lbp && <div style={{ fontSize:11, color:COLORS.textFaint, marginTop:3 }}>= {fmtLBP((parseFloat(lbp)||0)*1000)} ل.ل</div>}
+      </Field>
+      <div style={{ display:"flex", gap:8 }}>
+        <button onClick={save} style={{ flex:1, background:COLORS.green, border:"none", borderRadius:10, padding:"12px", color:"#fff", fontWeight:700, cursor:"pointer" }}>حفظ</button>
+        <button onClick={()=>setEditing(false)} style={{ flex:1, background:COLORS.bgCard2, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"12px", color:COLORS.textDim, fontWeight:700, cursor:"pointer" }}>إلغاء</button>
+      </div>
+    </>
+  );
+}                                                     }
