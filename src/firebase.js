@@ -1,21 +1,5 @@
-// ============================================================
-// Firebase initialization + Firestore + Authentication helpers
-// ============================================================
 import { initializeApp } from "firebase/app";
-import {
-  getFirestore,
-  doc,
-  getDoc,
-  setDoc,
-  onSnapshot,
-} from "firebase/firestore";
-import {
-  getAuth,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  onAuthStateChanged,
-  signOut,
-} from "firebase/auth";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCEIKF9z7A1UgsfIYainx8C9VI8eq-E1aQ",
@@ -27,63 +11,22 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
-export const auth = getAuth(app);
+const db = getFirestore(app);
+const DOC_REF = doc(db, "delivery_v3", "data");
 
-// كل بيانات التطبيق محفوظة بمستند واحد، عشان التحديثات اللحظية تكون بسيطة وسريعة
-const DOC_REF = doc(db, "app", "data");
-
-export async function loadDataOnce() {
+export async function loadFromCloud() {
   try {
     const snap = await getDoc(DOC_REF);
-    if (snap.exists()) return snap.data();
-  } catch (e) {
-    console.error("فشل تحميل البيانات", e);
-  }
-  return null;
+    return snap.exists() ? snap.data() : null;
+  } catch { return null; }
 }
 
-export async function saveData(data) {
-  try {
-    await setDoc(DOC_REF, data);
-  } catch (e) {
-    console.error("فشل الحفظ", e);
-    throw e;
-  }
+export async function saveToCloud(data) {
+  try { await setDoc(DOC_REF, data); } catch {}
 }
 
-// تستمع لأي تغيير يصير على البيانات (من أي جهاز) وتستدعي callback فوراً
-export function subscribeToData(callback) {
-  return onSnapshot(
-    DOC_REF,
-    (snap) => {
-      if (snap.exists()) callback(snap.data());
-    },
-    (error) => {
-      console.error("خطأ بالمزامنة اللحظية", error);
-    }
-  );
-}
-
-/* ============================================================
-   دوال المصادقة (Authentication) — تسجيل دخول حقيقي بالبريد الإلكتروني
-   ============================================================ */
-
-export async function registerWithEmail(email, password) {
-  const cred = await createUserWithEmailAndPassword(auth, email, password);
-  return cred.user;
-}
-
-export async function loginWithEmail(email, password) {
-  const cred = await signInWithEmailAndPassword(auth, email, password);
-  return cred.user;
-}
-
-export async function logout() {
-  await signOut(auth);
-}
-
-// تستمع لحالة تسجيل الدخول (هل في مستخدم مسجل دخول أم لا) وتستدعي callback
-export function subscribeToAuth(callback) {
-  return onAuthStateChanged(auth, callback);
+export function subscribeToCloud(callback) {
+  return onSnapshot(DOC_REF, snap => {
+    if (snap.exists()) callback(snap.data());
+  }, () => {});
 }
