@@ -35,16 +35,7 @@ jobs:
       - name: Update assetlinks.json
         run: |
           mkdir -p ./dist/.well-known
-          cat > ./dist/.well-known/assetlinks.json << 'EOF'
-          [{
-            "relation": ["delegate_permission/common.handle_all_urls"],
-            "target": {
-              "namespace": "android_app",
-              "package_name": "io.github.zidanammar7111_cpu.twa",
-              "sha256_cert_fingerprints": ["46:B8:99:08:A8:F2:1E:55:BC:AD:49:8E:FF:4D:8D:3B:3B:62:EB:9F:38:28:64:3C:7B:24:C6:F0:E7:24:5D:04"]
-            }
-          }]
-          EOF
+          printf '[{"relation":["delegate_permission/common.handle_all_urls"],"target":{"namespace":"android_app","package_name":"io.github.zidanammar7111_cpu.twa","sha256_cert_fingerprints":["46:B8:99:08:A8:F2:1E:55:BC:AD:49:8E:FF:4D:8D:3B:3B:62:EB:9F:38:28:64:3C:7B:24:C6:F0:E7:24:5D:04"]}}]' > ./dist/.well-known/assetlinks.json
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
