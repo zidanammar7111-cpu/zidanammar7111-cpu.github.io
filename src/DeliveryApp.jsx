@@ -17,7 +17,7 @@ const COMPANY_COLORS = ["#ff4d6d","#4f8ef7","#00c896","#ff8c42","#b06cf3","#ffd1
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const fmt = (n, d=2) => Number(n||0).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
 const fmtLBP = (n) => Number(n||0).toLocaleString("en-US",{maximumFractionDigits:0});
-const LOCAL_KEY = "delivery_v3_local";
+const LOCAL_KEY = "delivery_v4_local";
 
 const DAILY_QUOTES = [
   "كل يوم جديد هو فرصة جديدة لتحقيق أهدافك 🌅",
