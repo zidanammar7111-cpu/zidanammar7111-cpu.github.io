@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Home, Settings, Plus, ShoppingBag, Banknote, X, Trash2,
-  ChevronRight as ChevronRightIcon, Edit3, Check, Users, RefreshCw
+  ChevronRight as ChevronRightIcon, Edit3, Check, Users, RefreshCw, Key
 } from "lucide-react";
 import { loadFromCloud, saveToCloud, subscribeToCloud } from "./firebase";
 
@@ -37,7 +37,7 @@ const DAILY_QUOTES = [
   "يوم مثمر يبدأ بتنظيم جيد 🗂️",
 ];
 
-const FIXED_USERS = [
+const DEFAULT_USERS = [
   { id:"user1", username:"ammar", password:"1234", displayName:"عمار", role:"admin" },
   { id:"user2", username:"wife", password:"1234", displayName:"زوجتي", role:"user" },
 ];
@@ -50,13 +50,16 @@ const DEFAULT_DATA = {
   orders: [],
   expenses: [],
   personalDebts: [],
+  users: DEFAULT_USERS,
 };
 
 function loadLocal() {
   try {
     const raw = localStorage.getItem(LOCAL_KEY);
     if (!raw) return DEFAULT_DATA;
-    return { ...DEFAULT_DATA, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    if (!parsed.users) parsed.users = DEFAULT_USERS;
+    return { ...DEFAULT_DATA, ...parsed };
   } catch { return DEFAULT_DATA; }
 }
 
@@ -131,7 +134,7 @@ function AmountInput({ currency, value, onChange, placeholder="0" }) {
   );
 }
 
-function LoginScreen({ onLogin }) {
+function LoginScreen({ onLogin, users }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -145,7 +148,8 @@ function LoginScreen({ onLogin }) {
   }, []);
 
   const handleLogin = () => {
-    const user = FIXED_USERS.find(u => u.username === username.trim() && u.password === password);
+    const allUsers = users || DEFAULT_USERS;
+    const user = allUsers.find(u => u.username === username.trim() && u.password === password);
     if (user) {
       localStorage.setItem("biometric_user", JSON.stringify(user));
       onLogin(user);
@@ -156,11 +160,8 @@ function LoginScreen({ onLogin }) {
 
   const handleBiometric = () => {
     const savedUser = localStorage.getItem("biometric_user");
-    if (savedUser) {
-      onLogin(JSON.parse(savedUser));
-    } else {
-      setError("سجّل دخول مرة بكلمة المرور أولاً لتفعيل البصمة");
-    }
+    if (savedUser) onLogin(JSON.parse(savedUser));
+    else setError("سجّل دخول مرة بكلمة المرور أولاً لتفعيل البصمة");
   };
 
   const today = new Date();
@@ -168,13 +169,18 @@ function LoginScreen({ onLogin }) {
   const monthNames = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
 
   return (
-    <div dir="rtl" style={{ minHeight:"100vh", background:`linear-gradient(135deg, #0f1117 0%, #1a1d27 50%, #0f1117 100%)`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:24, fontFamily:"'Segoe UI', Tahoma, Arial, sans-serif" }}>
-      <div style={{ marginBottom:24, textAlign:"center" }}>
+    <div dir="rtl" style={{ minHeight:"100vh", background:`linear-gradient(135deg, #0f1117 0%, #1a1d27 50%, #0f1117 100%)`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:24, fontFamily:"'Segoe UI', Tahoma, Arial, sans-serif", position:"relative", overflow:"hidden" }}>
+      {/* دوائر زخرفية */}
+      <div style={{ position:"absolute", top:-60, right:-60, width:200, height:200, borderRadius:99, background:`${COLORS.green}08` }} />
+      <div style={{ position:"absolute", bottom:-40, left:-40, width:150, height:150, borderRadius:99, background:`${COLORS.blue}08` }} />
+
+      <div style={{ marginBottom:28, textAlign:"center", position:"relative", zIndex:1 }}>
         <div style={{ width:90, height:90, borderRadius:26, background:`linear-gradient(135deg, ${COLORS.green}, ${COLORS.blue})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:44, margin:"0 auto 14px", boxShadow:`0 20px 50px ${COLORS.green}40` }}>🛵</div>
         <div style={{ fontSize:26, fontWeight:800, color:COLORS.text }}>دليفري بزنس</div>
         <div style={{ fontSize:12, color:COLORS.textDim, marginTop:4 }}>{dayNames[today.getDay()]}، {today.getDate()} {monthNames[today.getMonth()]} {today.getFullYear()}</div>
       </div>
-      <div style={{ width:"100%", maxWidth:380, background:COLORS.bgCard, borderRadius:24, padding:24, border:`1px solid ${COLORS.border}` }}>
+
+      <div style={{ width:"100%", maxWidth:380, background:COLORS.bgCard, borderRadius:24, padding:24, border:`1px solid ${COLORS.border}`, position:"relative", zIndex:1 }}>
         <div style={{ fontSize:16, fontWeight:800, color:COLORS.text, marginBottom:20, textAlign:"center" }}>🔐 تسجيل الدخول</div>
         <Field label="اسم المستخدم">
           <input style={inputStyle} value={username} onChange={e=>setUsername(e.target.value)} placeholder="أدخل اسم المستخدم" autoCapitalize="none" />
@@ -210,6 +216,7 @@ export default function DeliveryApp() {
     loadFromCloud().then(cloudData => {
       if (cloudData) {
         const merged = { ...DEFAULT_DATA, ...cloudData };
+        if (!merged.users) merged.users = DEFAULT_USERS;
         setData(merged);
         saveLocal(merged);
       }
@@ -220,6 +227,7 @@ export default function DeliveryApp() {
     const unsub = subscribeToCloud((cloudData) => {
       if (skipSync.current) { skipSync.current = false; return; }
       const merged = { ...DEFAULT_DATA, ...cloudData };
+      if (!merged.users) merged.users = DEFAULT_USERS;
       setData(merged);
       saveLocal(merged);
     });
@@ -249,7 +257,7 @@ export default function DeliveryApp() {
     setSelectedCompany(null);
   };
 
-  if (!currentUser) return <LoginScreen onLogin={setCurrentUser} />;
+  if (!currentUser) return <LoginScreen onLogin={setCurrentUser} users={data.users} />;
 
   const rate = data.exchangeRate || 89000;
   const showNav = !subScreen && !selectedCompany && ["home","orders","expenses","settings"].includes(screen);
@@ -368,88 +376,92 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
 
   return (
     <div>
-      <div style={{ background:`linear-gradient(135deg, #1a1d27 0%, #21253a 100%)`, padding:"20px 16px 0" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
-          <div>
-            <div style={{ fontSize:13, color:COLORS.textDim, fontWeight:600 }}>{greeting}</div>
-            <div style={{ fontSize:22, fontWeight:800, color:COLORS.text, marginTop:2 }}>{currentUser?.displayName||"عمار"}</div>
-            <div style={{ fontSize:11, color:COLORS.textFaint, marginTop:3 }}>{dayNames[today.getDay()]}، {today.getDate()} {monthNames[today.getMonth()]} {today.getFullYear()}</div>
-          </div>
-          <div style={{ fontSize:40 }}>🛵</div>
-        </div>
+      {/* هيدر جديد */}
+      <div style={{ background:`linear-gradient(135deg, ${COLORS.green}25 0%, ${COLORS.bg} 60%)`, padding:"24px 16px 20px", position:"relative", overflow:"hidden" }}>
+        {/* دوائر زخرفية */}
+        <div style={{ position:"absolute", top:-40, left:-40, width:140, height:140, borderRadius:99, background:`${COLORS.green}08` }} />
+        <div style={{ position:"absolute", bottom:-20, right:-20, width:100, height:100, borderRadius:99, background:`${COLORS.blue}08` }} />
 
-        {/* عبارة اليوم */}
-        <div style={{ background:"rgba(0,200,150,0.08)", border:`1px solid ${COLORS.green}20`, borderRadius:12, padding:"10px 14px", marginBottom:14 }}>
-          <div style={{ fontSize:11, color:COLORS.green, fontWeight:700, marginBottom:3 }}>💡 عبارة اليوم</div>
-          <div style={{ fontSize:12, color:COLORS.text, lineHeight:1.5 }}>{DAILY_QUOTES[quoteIndex]}</div>
-        </div>
-
-        {/* شريط الإحصائيات السريعة — 4 بجانب بعض */}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:6, marginBottom:16 }}>
-          {[
-            {icon:"📦",label:"طلبات",value:`${todayOrders.length}`,color:COLORS.text},
-            {icon:"💰",label:"أرباح",value:`$${fmt(todayProfitUSD,0)}`,color:COLORS.green},
-            {icon:"🎁",label:"تيبس",value:`$${fmt(todayTipsUSD,0)}`,color:COLORS.purple},
-            {icon:"🏢",label:"مترتب",value:`$${fmt(totalDueUSD,0)}`,color:COLORS.orange},
-          ].map((s,i)=>(
-            <div key={i} style={{ background:"rgba(255,255,255,0.06)", border:`1px solid ${COLORS.border}`, borderRadius:12, padding:"8px 6px", textAlign:"center" }}>
-              <div style={{ fontSize:14, marginBottom:3 }}>{s.icon}</div>
-              <div style={{ fontSize:9, color:COLORS.textDim, marginBottom:2 }}>{s.label}</div>
-              <div style={{ fontSize:12, fontWeight:800, color:s.color }}>{s.value}</div>
+        <div style={{ position:"relative", zIndex:1 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+            <div>
+              <div style={{ fontSize:12, color:COLORS.green, fontWeight:700 }}>{greeting}</div>
+              <div style={{ fontSize:24, fontWeight:800, color:COLORS.text, marginTop:2 }}>{currentUser?.displayName||"عمار"} 👋</div>
+              <div style={{ fontSize:11, color:COLORS.textFaint, marginTop:3 }}>{dayNames[today.getDay()]}، {today.getDate()} {monthNames[today.getMonth()]} {today.getFullYear()}</div>
             </div>
-          ))}
-        </div>
-
-        {/* الرصيد */}
-        <div style={{ display:"flex", gap:10, marginBottom:16 }}>
-          <div style={{ flex:1, background:"rgba(0,200,150,0.15)", border:`1px solid ${COLORS.green}40`, borderRadius:16, padding:"14px 12px" }}>
-            <div style={{ color:COLORS.green, fontSize:11, fontWeight:700, marginBottom:4 }}>$ بالدولار</div>
-            <div style={{ color:COLORS.text, fontSize:22, fontWeight:800 }}>${fmt(data.balanceUSD||0)}</div>
+            <div style={{ width:54, height:54, borderRadius:16, background:`linear-gradient(135deg, ${COLORS.green}, ${COLORS.blue})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, boxShadow:`0 8px 24px ${COLORS.green}40` }}>
+              🛵
+            </div>
           </div>
-          <div style={{ flex:1, background:"rgba(79,142,247,0.15)", border:`1px solid ${COLORS.blue}40`, borderRadius:16, padding:"14px 12px" }}>
-            <div style={{ color:COLORS.blue, fontSize:11, fontWeight:700, marginBottom:4 }}>ل.ل بالليرة</div>
-            <div style={{ color:COLORS.text, fontSize:16, fontWeight:800 }}>{fmtLBP(data.balanceLBP||0)}</div>
+
+          {/* الرصيد الكلي - تصميم جديد */}
+          <div style={{ background:"rgba(0,0,0,0.35)", borderRadius:20, padding:"16px 18px", marginBottom:14, border:`1px solid ${COLORS.green}20` }}>
+            <div style={{ fontSize:11, color:COLORS.textDim, marginBottom:8 }}>💼 الرصيد الكلي</div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div>
+                <div style={{ fontSize:28, fontWeight:800, color:COLORS.text }}>${fmt(data.balanceUSD||0)}</div>
+                <div style={{ fontSize:12, color:COLORS.blue, marginTop:2 }}>{fmtLBP(data.balanceLBP||0)} ل.ل</div>
+              </div>
+              <div style={{ textAlign:"center" }}>
+                <div style={{ width:58, height:58, borderRadius:99, background:`${COLORS.green}20`, border:`2px solid ${COLORS.green}40`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+                  <div style={{ fontSize:20, fontWeight:800, color:COLORS.green }}>{todayOrders.length}</div>
+                  <div style={{ fontSize:9, color:COLORS.textDim }}>طلب اليوم</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* إحصائيات اليوم */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8 }}>
+            {[
+              {icon:"💰",label:"أرباح",value:`$${fmt(todayProfitUSD,0)}`,color:COLORS.green},
+              {icon:"🎁",label:"تيبس",value:`$${fmt(todayTipsUSD,0)}`,color:COLORS.purple},
+              {icon:"🏢",label:"مترتب",value:`$${fmt(totalDueUSD,0)}`,color:COLORS.orange},
+              {icon:"💸",label:"مصروف",value:`$${fmt(totalExpUSD,0)}`,color:COLORS.red},
+            ].map((s,i)=>(
+              <div key={i} style={{ background:"rgba(0,0,0,0.25)", borderRadius:14, padding:"10px 6px", textAlign:"center", border:`1px solid ${COLORS.border}` }}>
+                <div style={{ fontSize:16, marginBottom:3 }}>{s.icon}</div>
+                <div style={{ fontSize:9, color:COLORS.textDim, marginBottom:2 }}>{s.label}</div>
+                <div style={{ fontSize:12, fontWeight:800, color:s.color }}>{s.value}</div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      <div style={{ padding:"16px 16px 0" }}>
-        {/* إحصائيات */}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
-          <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:14, padding:"12px 14px" }}>
-            <div style={{ fontSize:11, color:COLORS.textDim, marginBottom:4 }}>مترتب للشركات</div>
-            <div style={{ fontSize:18, fontWeight:800, color:COLORS.orange }}>${fmt(totalDueUSD)}</div>
-          </div>
-          <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:14, padding:"12px 14px" }}>
-            <div style={{ fontSize:11, color:COLORS.textDim, marginBottom:4 }}>المصروفات</div>
-            <div style={{ fontSize:16, fontWeight:800, color:COLORS.red }}>${fmt(totalExpUSD)}</div>
-            {totalExpLBP>0 && <div style={{ fontSize:11, color:COLORS.blue }}>{fmtLBP(totalExpLBP)} ل.ل</div>}
+      <div style={{ padding:"14px 16px 0" }}>
+        {/* عبارة اليوم */}
+        <div style={{ background:`linear-gradient(135deg, ${COLORS.green}15, ${COLORS.bgCard2})`, border:`1px solid ${COLORS.green}25`, borderRadius:16, padding:"12px 16px", marginBottom:16, display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ fontSize:22, flexShrink:0 }}>💡</div>
+          <div>
+            <div style={{ fontSize:10, color:COLORS.green, fontWeight:700, marginBottom:3 }}>عبارة اليوم</div>
+            <div style={{ fontSize:12, color:COLORS.text, lineHeight:1.5 }}>{DAILY_QUOTES[quoteIndex]}</div>
           </div>
         </div>
 
         {/* أزرار سريعة */}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
-          <button onClick={()=>setShowQuickOrder(true)} style={{ background:`linear-gradient(135deg, ${COLORS.green}30, ${COLORS.green}10)`, border:`2px solid ${COLORS.green}50`, borderRadius:14, padding:"16px 12px", display:"flex", alignItems:"center", gap:10, cursor:"pointer" }}>
-            <span style={{ fontSize:24 }}>📦</span>
+          <button onClick={()=>setShowQuickOrder(true)} style={{ background:`linear-gradient(135deg, ${COLORS.green}30, ${COLORS.green}10)`, border:`2px solid ${COLORS.green}50`, borderRadius:16, padding:"16px 12px", display:"flex", alignItems:"center", gap:10, cursor:"pointer" }}>
+            <div style={{ width:40, height:40, borderRadius:12, background:`${COLORS.green}30`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>📦</div>
             <div style={{ textAlign:"right" }}>
               <div style={{ fontSize:14, fontWeight:800, color:COLORS.green }}>طلب سريع</div>
-              <div style={{ fontSize:10, color:COLORS.textDim }}>بدون دخول الطلبات</div>
+              <div style={{ fontSize:10, color:COLORS.textDim }}>إضافة فورية</div>
             </div>
           </button>
-          <button onClick={()=>goTo("expenses","add")} style={{ background:`${COLORS.red}18`, border:`1px solid ${COLORS.red}40`, borderRadius:14, padding:"16px 12px", display:"flex", alignItems:"center", gap:10, cursor:"pointer" }}>
-            <span style={{ fontSize:24 }}>💸</span>
+          <button onClick={()=>goTo("expenses","add")} style={{ background:`linear-gradient(135deg, ${COLORS.red}25, ${COLORS.red}10)`, border:`2px solid ${COLORS.red}40`, borderRadius:16, padding:"16px 12px", display:"flex", alignItems:"center", gap:10, cursor:"pointer" }}>
+            <div style={{ width:40, height:40, borderRadius:12, background:`${COLORS.red}30`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>💸</div>
             <div style={{ textAlign:"right" }}>
-              <div style={{ fontSize:14, fontWeight:800, color:COLORS.text }}>مصروف جديد</div>
+              <div style={{ fontSize:14, fontWeight:800, color:COLORS.red }}>مصروف</div>
               <div style={{ fontSize:10, color:COLORS.textDim }}>دولار أو ليرة</div>
             </div>
           </button>
           <button onClick={()=>goTo("settings")} style={{ background:`${COLORS.blue}18`, border:`1px solid ${COLORS.blue}40`, borderRadius:14, padding:"14px 12px", display:"flex", alignItems:"center", gap:10, cursor:"pointer" }}>
-            <span style={{ fontSize:22 }}>🔄</span>
-            <span style={{ fontSize:14, fontWeight:700, color:COLORS.text }}>تحويل عملة</span>
+            <span style={{ fontSize:20 }}>🔄</span>
+            <span style={{ fontSize:13, fontWeight:700, color:COLORS.text }}>تحويل عملة</span>
           </button>
           <button onClick={()=>goTo("orders")} style={{ background:`${COLORS.purple}18`, border:`1px solid ${COLORS.purple}40`, borderRadius:14, padding:"14px 12px", display:"flex", alignItems:"center", gap:10, cursor:"pointer" }}>
-            <span style={{ fontSize:22 }}>📊</span>
-            <span style={{ fontSize:14, fontWeight:700, color:COLORS.text }}>كل الطلبات</span>
+            <span style={{ fontSize:20 }}>📊</span>
+            <span style={{ fontSize:13, fontWeight:700, color:COLORS.text }}>كل الطلبات</span>
           </button>
         </div>
 
@@ -490,25 +502,31 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
             const todayCount = companyOrders.filter(o=>new Date(o.createdAt).toDateString()===todayStr).length;
             const totalProfitUSD = companyOrders.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.profit||0),0);
             return (
-              <div key={company.id} onClick={()=>onSelectCompany(company)} style={{ background:COLORS.bgCard, border:`2px solid ${company.color}40`, borderRadius:18, padding:16, cursor:"pointer" }}>
+              <div key={company.id} onClick={()=>onSelectCompany(company)} style={{ background:`linear-gradient(135deg, ${COLORS.bgCard}, ${COLORS.bgCard2})`, border:`2px solid ${company.color}30`, borderRadius:20, padding:16, cursor:"pointer", boxShadow:`0 4px 20px ${company.color}10` }}>
                 <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
-                  <div style={{ width:48, height:48, borderRadius:14, background:company.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, fontWeight:800, color:"#fff", flexShrink:0 }}>{company.name.slice(0,1)}</div>
+                  <div style={{ width:50, height:50, borderRadius:16, background:`linear-gradient(135deg, ${company.color}, ${company.color}80)`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, fontWeight:800, color:"#fff", flexShrink:0, boxShadow:`0 4px 14px ${company.color}50` }}>
+                    {company.name.slice(0,1)}
+                  </div>
                   <div style={{ flex:1 }}>
-                    <div style={{ fontWeight:800, fontSize:16 }}>{company.name}</div>
+                    <div style={{ fontWeight:800, fontSize:16, color:COLORS.text }}>{company.name}</div>
                     <div style={{ fontSize:11, color:COLORS.textFaint, marginTop:2 }}>{todayCount} طلب اليوم · {companyOrders.length} إجمالي</div>
                   </div>
                   <div style={{ color:COLORS.textFaint, fontSize:20 }}>›</div>
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-                  <div style={{ background:`${COLORS.orange}15`, border:`1px solid ${COLORS.orange}30`, borderRadius:12, padding:"10px 12px" }}>
-                    <div style={{ fontSize:10, color:COLORS.orange, fontWeight:700, marginBottom:2 }}>💰 مترتب</div>
-                    <div style={{ fontSize:18, fontWeight:800, color:COLORS.orange }}>${fmt(dueUSD)}</div>
+                  <div style={{ background:"rgba(0,0,0,0.25)", borderRadius:14, padding:"10px 12px" }}>
+                    <div style={{ fontSize:10, color:COLORS.orange, fontWeight:700, marginBottom:4 }}>💰 مترتب للشركة</div>
+                    <div style={{ fontSize:20, fontWeight:800, color:COLORS.orange }}>${fmt(dueUSD)}</div>
                     {dueLBP>0 && <div style={{ fontSize:10, color:COLORS.blue }}>{fmtLBP(dueLBP)} ل.ل</div>}
-                    {dueUSD===0&&dueLBP===0 && <div style={{ fontSize:10, color:COLORS.green }}>✅ مسدّد</div>}
+                    {dueUSD>0 && (
+                      <div style={{ marginTop:6, background:COLORS.orange, borderRadius:8, padding:"5px 0", textAlign:"center", fontSize:11, fontWeight:700, color:"#fff" }}>تسديد الآن</div>
+                    )}
+                    {dueUSD===0&&dueLBP===0 && <div style={{ fontSize:10, color:COLORS.green, marginTop:4 }}>✅ لا يوجد مترتب</div>}
                   </div>
-                  <div style={{ background:`${COLORS.green}15`, border:`1px solid ${COLORS.green}30`, borderRadius:12, padding:"10px 12px" }}>
-                    <div style={{ fontSize:10, color:COLORS.green, fontWeight:700, marginBottom:2 }}>📈 أرباح</div>
-                    <div style={{ fontSize:18, fontWeight:800, color:COLORS.green }}>${fmt(totalProfitUSD)}</div>
+                  <div style={{ background:"rgba(0,0,0,0.25)", borderRadius:14, padding:"10px 12px" }}>
+                    <div style={{ fontSize:10, color:COLORS.green, fontWeight:700, marginBottom:4 }}>📈 إجمالي الأرباح</div>
+                    <div style={{ fontSize:20, fontWeight:800, color:COLORS.green }}>${fmt(totalProfitUSD)}</div>
+                    <div style={{ fontSize:10, color:COLORS.textDim, marginTop:4 }}>{companyOrders.length} طلب</div>
                   </div>
                 </div>
               </div>
@@ -574,11 +592,7 @@ function QuickOrderSheet({ data, persist, showToast, rate, currentUser, companie
             </div>
             <div style={{ background:COLORS.bgCard2, borderRadius:14, padding:12, marginBottom:14 }}>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
-                {[
-                  {label:"مترتب",value:currency==="usd"?`$${fmt(dueToCompany)}`:`${fmt(dueToCompany)} ألف`,color:COLORS.orange},
-                  {label:"ربح",value:currency==="usd"?`$${fmt(pr)}`:`${fmt(pr)} ألف`,color:COLORS.green},
-                  {label:"تيبس",value:`$${fmt(tips)}`,color:COLORS.purple},
-                ].map((s,i)=>(
+                {[{label:"مترتب",value:currency==="usd"?`$${fmt(dueToCompany)}`:`${fmt(dueToCompany)} ألف`,color:COLORS.orange},{label:"ربح",value:currency==="usd"?`$${fmt(pr)}`:`${fmt(pr)} ألف`,color:COLORS.green},{label:"تيبس",value:`$${fmt(tips)}`,color:COLORS.purple}].map((s,i)=>(
                   <div key={i} style={{ textAlign:"center" }}>
                     <div style={{ fontSize:10, color:COLORS.textDim, marginBottom:2 }}>{s.label}</div>
                     <div style={{ fontSize:14, fontWeight:800, color:s.color }}>{s.value}</div>
@@ -645,7 +659,7 @@ function CompanyScreen({ data, persist, showToast, company, currentUser, onBack,
       <div style={{ padding:"0 16px" }}>
         <div style={{ background:`linear-gradient(135deg, ${company.color}20, ${company.color}10)`, border:`1px solid ${company.color}40`, borderRadius:18, padding:18, marginBottom:16 }}>
           <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:14 }}>
-            <div style={{ width:52, height:52, borderRadius:14, background:company.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, fontWeight:800, color:"#fff" }}>{company.name.slice(0,1)}</div>
+            <div style={{ width:52, height:52, borderRadius:14, background:`linear-gradient(135deg, ${company.color}, ${company.color}80)`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, fontWeight:800, color:"#fff", boxShadow:`0 4px 14px ${company.color}50` }}>{company.name.slice(0,1)}</div>
             <div><div style={{ fontSize:18, fontWeight:800 }}>{company.name}</div><div style={{ fontSize:12, color:COLORS.textFaint }}>{companyOrders.length} طلب إجمالي</div></div>
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
@@ -895,7 +909,6 @@ function ExpenseCard({ expense, onDelete, onEdit, rate }) {
   const isUSD=expense.currency==="usd";
   const dt=new Date(expense.createdAt);
   const displayUSD = isUSD ? expense.amount : (expense.amount*1000/rate);
-  const displayLBP = isUSD ? null : expense.amount*1000;
   return (
     <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:14, overflow:"hidden" }}>
       <div onClick={()=>setOpen(o=>!o)} style={{ padding:"12px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }}>
@@ -908,7 +921,7 @@ function ExpenseCard({ expense, onDelete, onEdit, rate }) {
         </div>
         <div style={{ textAlign:"left" }}>
           <div style={{ fontWeight:800, color:COLORS.red, fontSize:14 }}>-${fmt(displayUSD)}</div>
-          {!isUSD && <div style={{ fontSize:10, color:COLORS.textFaint }}>{fmtLBP(displayLBP)} ل.ل</div>}
+          {!isUSD && <div style={{ fontSize:10, color:COLORS.textFaint }}>{fmtLBP(expense.amount*1000)} ل.ل</div>}
         </div>
       </div>
       {open&&(
@@ -916,7 +929,6 @@ function ExpenseCard({ expense, onDelete, onEdit, rate }) {
           <Row label="النوع" value={expense.category||""} />
           <Row label="المبلغ الأصلي" value={isUSD?`$${fmt(expense.amount)}`:`${fmt(expense.amount)} ألف ل.ل`} valueColor={COLORS.red} />
           {!isUSD && <Row label="بالدولار" value={`≈ $${fmt(displayUSD)}`} valueColor={COLORS.textDim} />}
-          {expense.affectsBalance===false && <div style={{ fontSize:11, color:COLORS.textFaint, background:COLORS.bgCard2, padding:"4px 8px", borderRadius:6 }}>⚠️ لم يُخصم من الرصيد</div>}
           {expense.note&&<Row label="ملاحظات" value={expense.note} />}
           <div style={{ display:"flex", gap:10, marginTop:6 }}>
             <button onClick={onEdit} style={{ background:"none", border:"none", color:COLORS.blue, fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}><Edit3 size={14}/> تعديل</button>
@@ -944,12 +956,8 @@ function ExpenseForm({ data, persist, showToast, editing, currentUser, onBack, r
     const expense={id:e?e.id:uid(),currency,amount:amt,category:category.trim(),note:note.trim(),createdAt:e?e.createdAt:Date.now(),byName:currentUser?.displayName||"",affectsBalance};
     persist(prev=>{
       let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0;
-      if(e&&e.affectsBalance!==false){
-        if(e.currency==="usd")newUSD+=e.amount||0; else newLBP+=(e.amount||0)*1000;
-      }
-      if(affectsBalance){
-        if(currency==="usd")newUSD-=amt; else newLBP-=amt*1000;
-      }
+      if(e&&e.affectsBalance!==false){ if(e.currency==="usd")newUSD+=e.amount||0; else newLBP+=(e.amount||0)*1000; }
+      if(affectsBalance){ if(currency==="usd")newUSD-=amt; else newLBP-=amt*1000; }
       return {...prev,expenses:e?prev.expenses.map(ex=>ex.id===e.id?expense:ex):[...(prev.expenses||[]),expense],balanceUSD:newUSD,balanceLBP:newLBP};
     });
     showToast(e?"تم تعديل المصروف ✓":"تم حفظ المصروف ✓"); onBack();
@@ -975,7 +983,7 @@ function ExpenseForm({ data, persist, showToast, editing, currentUser, onBack, r
         <Field label="هل يخصم من الرصيد؟">
           <div style={{ display:"flex", gap:8 }}>
             <button onClick={()=>setAffectsBalance(true)} style={{ flex:1, padding:"10px", borderRadius:10, border:"none", fontWeight:700, cursor:"pointer", background:affectsBalance?COLORS.red:COLORS.bgCard2, color:affectsBalance?"#fff":COLORS.textDim }}>✓ نعم، يخصم</button>
-            <button onClick={()=>setAffectsBalance(false)} style={{ flex:1, padding:"10px", borderRadius:10, border:"none", fontWeight:700, cursor:"pointer", background:!affectsBalance?COLORS.bgCard:COLORS.bgCard2, color:!affectsBalance?COLORS.text:COLORS.textDim, border:`1px solid ${!affectsBalance?COLORS.border:"transparent"}` }}>لا يخصم</button>
+            <button onClick={()=>setAffectsBalance(false)} style={{ flex:1, padding:"10px", borderRadius:10, border:`1px solid ${COLORS.border}`, fontWeight:700, cursor:"pointer", background:!affectsBalance?COLORS.bgCard2:"transparent", color:COLORS.textDim }}>لا يخصم</button>
           </div>
         </Field>
         <Field label="ملاحظات (اختياري)"><input style={inputStyle} value={note} onChange={e=>setNote(e.target.value)} placeholder="ملاحظات..." /></Field>
@@ -1045,10 +1053,7 @@ function DebtCard({ debt, onDelete, onEdit, onPay }) {
           <div style={{ width:36, height:36, borderRadius:9, background:color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:800, color:"#fff" }}>{debt.name.slice(0,1)}</div>
           <div>
             <div style={{ fontWeight:700, fontSize:14 }}>{debt.name}</div>
-            <div style={{ fontSize:11, color:COLORS.textFaint }}>
-              {isSettled?"✅ مسدّد":`متبقي: ${isUSD?`$${fmt(remaining)}`:`${fmt(remaining)} ألف ل.ل`}`}
-              {debt.affectsBalance===false && " · لا يؤثر على الرصيد"}
-            </div>
+            <div style={{ fontSize:11, color:COLORS.textFaint }}>{isSettled?"✅ مسدّد":`متبقي: ${isUSD?`$${fmt(remaining)}`:`${fmt(remaining)} ألف ل.ل`}`}</div>
           </div>
         </div>
         <div style={{ fontWeight:800, color, fontSize:15 }}>{isUSD?`$${fmt(debt.amount)}`:`${fmt(debt.amount)} ألف ل.ل`}</div>
@@ -1124,12 +1129,12 @@ function DebtForm({ data, persist, showToast, editing, onBack, rate }) {
             <button onClick={()=>setAffectsBalance(true)} style={{ flex:1, padding:"10px", borderRadius:10, border:"none", fontWeight:700, cursor:"pointer", background:affectsBalance?(direction==="owedToMe"?COLORS.green:COLORS.red):COLORS.bgCard2, color:affectsBalance?"#fff":COLORS.textDim, fontSize:13 }}>
               {direction==="owedToMe"?"✓ يُضاف للرصيد":"✓ يُخصم من الرصيد"}
             </button>
-            <button onClick={()=>setAffectsBalance(false)} style={{ flex:1, padding:"10px", borderRadius:10, border:`1px solid ${COLORS.border}`, fontWeight:700, cursor:"pointer", background:!affectsBalance?COLORS.bgCard2:"transparent", color:!affectsBalance?COLORS.text:COLORS.textDim, fontSize:13 }}>
+            <button onClick={()=>setAffectsBalance(false)} style={{ flex:1, padding:"10px", borderRadius:10, border:`1px solid ${COLORS.border}`, fontWeight:700, cursor:"pointer", background:!affectsBalance?COLORS.bgCard2:"transparent", color:COLORS.textDim, fontSize:13 }}>
               📝 تسجيل فقط
             </button>
           </div>
           <div style={{ fontSize:11, color:COLORS.textFaint, marginTop:6 }}>
-            {affectsBalance ? (direction==="owedToMe"?"سيُضاف المبلغ لرصيدك فوراً":"سيُخصم المبلغ من رصيدك فوراً") : "يُسجّل فقط بدون تأثير على الرصيد"}
+            {affectsBalance?(direction==="owedToMe"?"سيُضاف المبلغ لرصيدك فوراً":"سيُخصم المبلغ من رصيدك فوراً"):"يُسجّل فقط بدون تأثير على الرصيد"}
           </div>
         </Field>
         <Field label="ملاحظة (اختياري)"><input style={inputStyle} value={note} onChange={e=>setNote(e.target.value)} placeholder="سبب الدين..." /></Field>
@@ -1181,6 +1186,8 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
   const [showConvert,setShowConvert]=useState(false);
   const [convertAmount,setConvertAmount]=useState("");
   const [convertDir,setConvertDir]=useState("usd_to_lbp");
+  const [showPassEditor,setShowPassEditor]=useState(false);
+  const [editUsers,setEditUsers]=useState(() => (data.users||DEFAULT_USERS).map(u=>({...u})));
 
   const saveRate=()=>{ const r=parseFloat(rateInput); if(r>0){persist(prev=>({...prev,exchangeRate:r}));showToast("تم تحديث سعر الصرف ✓");} setEditingRate(false); };
   const amt=parseFloat(convertAmount)||0;
@@ -1191,10 +1198,18 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
     showToast("تم التحويل ✓"); setConvertAmount("");
   };
 
+  const savePasswords=()=>{
+    persist(prev=>({...prev,users:editUsers}));
+    showToast("تم حفظ كلمات المرور ✓");
+    setShowPassEditor(false);
+  };
+
   return (
     <div>
       <TopBar title="الإعدادات" />
       <div style={{ padding:"0 16px" }}>
+
+        {/* الرصيد */}
         <div style={{ background:`linear-gradient(135deg, ${COLORS.bgCard}, ${COLORS.bgCard2})`, border:`1px solid ${COLORS.border}`, borderRadius:18, padding:18, marginBottom:16 }}>
           <div style={{ fontSize:13, color:COLORS.textDim, fontWeight:700, marginBottom:12 }}>الرصيد الحالي</div>
           <div style={{ display:"flex", gap:10 }}>
@@ -1209,6 +1224,7 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
           </div>
         </div>
 
+        {/* تحويل العملة */}
         <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:showConvert?16:0 }}>
             <div style={{ fontWeight:800, fontSize:14 }}>🔄 تحويل العملة</div>
@@ -1235,6 +1251,7 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
           )}
         </div>
 
+        {/* سعر الصرف */}
         <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
           <div style={{ fontWeight:800, fontSize:14, marginBottom:10 }}>💱 سعر الصرف</div>
           {editingRate?(
@@ -1251,19 +1268,53 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
           )}
         </div>
 
+        {/* كلمات المرور — للأدمين فقط */}
+        {currentUser?.role==="admin" && (
+          <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:showPassEditor?16:0 }}>
+              <div style={{ fontWeight:800, fontSize:14 }}>🔑 كلمات المرور</div>
+              <button onClick={()=>{ setEditUsers((data.users||DEFAULT_USERS).map(u=>({...u}))); setShowPassEditor(s=>!s); }} style={{ background:`${COLORS.orange}20`, border:`1px solid ${COLORS.orange}40`, borderRadius:8, padding:"6px 12px", color:COLORS.orange, fontWeight:700, fontSize:13, cursor:"pointer" }}>
+                {showPassEditor?"إلغاء":"تعديل"}
+              </button>
+            </div>
+            {showPassEditor && (
+              <>
+                {editUsers.map((u,i)=>(
+                  <div key={u.id} style={{ background:COLORS.bgCard2, borderRadius:12, padding:14, marginBottom:10 }}>
+                    <div style={{ fontSize:13, fontWeight:800, color:COLORS.text, marginBottom:10 }}>
+                      {u.displayName} <span style={{ fontSize:11, color:COLORS.textFaint }}>({u.username})</span>
+                    </div>
+                    <Field label="اسم المستخدم">
+                      <input style={inputStyle} value={u.username} onChange={ev=>{const nu=[...editUsers];nu[i]={...nu[i],username:ev.target.value};setEditUsers(nu);}} autoCapitalize="none" />
+                    </Field>
+                    <Field label="كلمة المرور الجديدة">
+                      <input style={inputStyle} type="password" value={u.password} onChange={ev=>{const nu=[...editUsers];nu[i]={...nu[i],password:ev.target.value};setEditUsers(nu);}} placeholder="أدخل كلمة المرور" />
+                    </Field>
+                    <Field label="الاسم الظاهر">
+                      <input style={inputStyle} value={u.displayName} onChange={ev=>{const nu=[...editUsers];nu[i]={...nu[i],displayName:ev.target.value};setEditUsers(nu);}} />
+                    </Field>
+                  </div>
+                ))}
+                <SaveBtn onClick={savePasswords} label="حفظ كلمات المرور ✓" color={COLORS.orange} />
+              </>
+            )}
+          </div>
+        )}
+
+        {/* تعديل الرصيد */}
         <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
           <div style={{ fontWeight:800, fontSize:14, marginBottom:6 }}>✏️ تعديل الرصيد يدوياً</div>
           <ManualBalanceEditor data={data} persist={persist} showToast={showToast} />
         </div>
 
+        {/* معلومات المشاركة */}
         <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
-          <div style={{ fontWeight:800, fontSize:14, marginBottom:8 }}>👤 الحساب الحالي</div>
-          <div style={{ fontSize:14, color:COLORS.textDim }}>مرحباً: <span style={{ color:COLORS.text, fontWeight:700 }}>{currentUser?.displayName}</span></div>
-          <div style={{ fontSize:12, color:COLORS.textFaint, marginTop:4, marginBottom:10 }}>اسم المستخدم: {currentUser?.username}</div>
-          <div style={{ fontSize:11, color:COLORS.textFaint, background:COLORS.bgCard2, padding:"8px 12px", borderRadius:8, lineHeight:1.6 }}>
-            👥 لمشاركة التطبيق مع زوجتك، أرسلي الرابط:{"\n"}
-            <span style={{ color:COLORS.green, fontWeight:700 }}>https://zidanammar7111-cpu.github.io</span>{"\n"}
-            اسم المستخدم: <b>wife</b> · كلمة المرور: <b>1234</b>
+          <div style={{ fontWeight:800, fontSize:14, marginBottom:8 }}>👥 مشاركة التطبيق</div>
+          <div style={{ fontSize:12, color:COLORS.textDim, lineHeight:1.8 }}>
+            أرسل لزوجتك:<br/>
+            🔗 <span style={{ color:COLORS.green, fontWeight:700 }}>https://zidanammar7111-cpu.github.io</span><br/>
+            اسم المستخدم: <span style={{ color:COLORS.text, fontWeight:700 }}>wife</span><br/>
+            كلمة المرور: <span style={{ color:COLORS.text, fontWeight:700 }}>1234</span>
           </div>
         </div>
 
@@ -1299,7 +1350,4 @@ function ManualBalanceEditor({ data, persist, showToast }) {
       <div style={{ display:"flex", gap:8 }}>
         <button onClick={save} style={{ flex:1, background:COLORS.green, border:"none", borderRadius:10, padding:"12px", color:"#fff", fontWeight:700, cursor:"pointer" }}>حفظ</button>
         <button onClick={()=>setEditing(false)} style={{ flex:1, background:COLORS.bgCard2, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"12px", color:COLORS.textDim, fontWeight:700, cursor:"pointer" }}>إلغاء</button>
-      </div>
-    </>
-  );
-}
+      </d
