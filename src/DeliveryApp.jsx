@@ -170,16 +170,13 @@ function LoginScreen({ onLogin, users }) {
 
   return (
     <div dir="rtl" style={{ minHeight:"100vh", background:`linear-gradient(135deg, #0f1117 0%, #1a1d27 50%, #0f1117 100%)`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:24, fontFamily:"'Segoe UI', Tahoma, Arial, sans-serif", position:"relative", overflow:"hidden" }}>
-      {/* دوائر زخرفية */}
       <div style={{ position:"absolute", top:-60, right:-60, width:200, height:200, borderRadius:99, background:`${COLORS.green}08` }} />
       <div style={{ position:"absolute", bottom:-40, left:-40, width:150, height:150, borderRadius:99, background:`${COLORS.blue}08` }} />
-
       <div style={{ marginBottom:28, textAlign:"center", position:"relative", zIndex:1 }}>
         <div style={{ width:90, height:90, borderRadius:26, background:`linear-gradient(135deg, ${COLORS.green}, ${COLORS.blue})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:44, margin:"0 auto 14px", boxShadow:`0 20px 50px ${COLORS.green}40` }}>🛵</div>
         <div style={{ fontSize:26, fontWeight:800, color:COLORS.text }}>دليفري بزنس</div>
         <div style={{ fontSize:12, color:COLORS.textDim, marginTop:4 }}>{dayNames[today.getDay()]}، {today.getDate()} {monthNames[today.getMonth()]} {today.getFullYear()}</div>
       </div>
-
       <div style={{ width:"100%", maxWidth:380, background:COLORS.bgCard, borderRadius:24, padding:24, border:`1px solid ${COLORS.border}`, position:"relative", zIndex:1 }}>
         <div style={{ fontSize:16, fontWeight:800, color:COLORS.text, marginBottom:20, textAlign:"center" }}>🔐 تسجيل الدخول</div>
         <Field label="اسم المستخدم">
@@ -355,10 +352,10 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
   const todayStr = new Date().toDateString();
   const todayOrders = orders.filter(o => new Date(o.createdAt).toDateString()===todayStr);
   const todayProfitUSD = todayOrders.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.profit||0),0);
+  const todayProfitLBP = todayOrders.filter(o=>o.currency==="lbp").reduce((s,o)=>s+(o.profit||0)*1000,0);
   const todayTipsUSD = todayOrders.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.tips||0),0);
   const totalDueUSD = companies.reduce((s,c)=>s+getCompanyDue(data,c.id).dueUSD,0);
   const totalExpUSD = (data.expenses||[]).filter(e=>e.currency==="usd").reduce((s,e)=>s+(e.amount||0),0);
-  const totalExpLBP = (data.expenses||[]).filter(e=>e.currency==="lbp").reduce((s,e)=>s+(e.amount||0)*1000,0);
 
   const today = new Date();
   const dayNames = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
@@ -376,12 +373,9 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
 
   return (
     <div>
-      {/* هيدر جديد */}
       <div style={{ background:`linear-gradient(135deg, ${COLORS.green}25 0%, ${COLORS.bg} 60%)`, padding:"24px 16px 20px", position:"relative", overflow:"hidden" }}>
-        {/* دوائر زخرفية */}
         <div style={{ position:"absolute", top:-40, left:-40, width:140, height:140, borderRadius:99, background:`${COLORS.green}08` }} />
         <div style={{ position:"absolute", bottom:-20, right:-20, width:100, height:100, borderRadius:99, background:`${COLORS.blue}08` }} />
-
         <div style={{ position:"relative", zIndex:1 }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
             <div>
@@ -389,12 +383,9 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
               <div style={{ fontSize:24, fontWeight:800, color:COLORS.text, marginTop:2 }}>{currentUser?.displayName||"عمار"} 👋</div>
               <div style={{ fontSize:11, color:COLORS.textFaint, marginTop:3 }}>{dayNames[today.getDay()]}، {today.getDate()} {monthNames[today.getMonth()]} {today.getFullYear()}</div>
             </div>
-            <div style={{ width:54, height:54, borderRadius:16, background:`linear-gradient(135deg, ${COLORS.green}, ${COLORS.blue})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, boxShadow:`0 8px 24px ${COLORS.green}40` }}>
-              🛵
-            </div>
+            <div style={{ width:54, height:54, borderRadius:16, background:`linear-gradient(135deg, ${COLORS.green}, ${COLORS.blue})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, boxShadow:`0 8px 24px ${COLORS.green}40` }}>🛵</div>
           </div>
 
-          {/* الرصيد الكلي - تصميم جديد */}
           <div style={{ background:"rgba(0,0,0,0.35)", borderRadius:20, padding:"16px 18px", marginBottom:14, border:`1px solid ${COLORS.green}20` }}>
             <div style={{ fontSize:11, color:COLORS.textDim, marginBottom:8 }}>💼 الرصيد الكلي</div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
@@ -402,16 +393,13 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
                 <div style={{ fontSize:28, fontWeight:800, color:COLORS.text }}>${fmt(data.balanceUSD||0)}</div>
                 <div style={{ fontSize:12, color:COLORS.blue, marginTop:2 }}>{fmtLBP(data.balanceLBP||0)} ل.ل</div>
               </div>
-              <div style={{ textAlign:"center" }}>
-                <div style={{ width:58, height:58, borderRadius:99, background:`${COLORS.green}20`, border:`2px solid ${COLORS.green}40`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-                  <div style={{ fontSize:20, fontWeight:800, color:COLORS.green }}>{todayOrders.length}</div>
-                  <div style={{ fontSize:9, color:COLORS.textDim }}>طلب اليوم</div>
-                </div>
+              <div style={{ width:58, height:58, borderRadius:99, background:`${COLORS.green}20`, border:`2px solid ${COLORS.green}40`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+                <div style={{ fontSize:20, fontWeight:800, color:COLORS.green }}>{todayOrders.length}</div>
+                <div style={{ fontSize:9, color:COLORS.textDim }}>طلب اليوم</div>
               </div>
             </div>
           </div>
 
-          {/* إحصائيات اليوم */}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8 }}>
             {[
               {icon:"💰",label:"أرباح",value:`$${fmt(todayProfitUSD,0)}`,color:COLORS.green},
@@ -430,7 +418,6 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
       </div>
 
       <div style={{ padding:"14px 16px 0" }}>
-        {/* عبارة اليوم */}
         <div style={{ background:`linear-gradient(135deg, ${COLORS.green}15, ${COLORS.bgCard2})`, border:`1px solid ${COLORS.green}25`, borderRadius:16, padding:"12px 16px", marginBottom:16, display:"flex", alignItems:"center", gap:12 }}>
           <div style={{ fontSize:22, flexShrink:0 }}>💡</div>
           <div>
@@ -439,7 +426,6 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
           </div>
         </div>
 
-        {/* أزرار سريعة */}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
           <button onClick={()=>setShowQuickOrder(true)} style={{ background:`linear-gradient(135deg, ${COLORS.green}30, ${COLORS.green}10)`, border:`2px solid ${COLORS.green}50`, borderRadius:16, padding:"16px 12px", display:"flex", alignItems:"center", gap:10, cursor:"pointer" }}>
             <div style={{ width:40, height:40, borderRadius:12, background:`${COLORS.green}30`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>📦</div>
@@ -465,7 +451,6 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
           </button>
         </div>
 
-        {/* الشركات */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
           <div style={{ fontSize:16, fontWeight:800 }}>🏢 الشركات</div>
           <button onClick={()=>setShowAddCompany(true)} style={{ background:`${COLORS.green}20`, border:`1px solid ${COLORS.green}40`, borderRadius:10, padding:"8px 14px", color:COLORS.green, fontWeight:700, fontSize:13, cursor:"pointer" }}>+ إضافة</button>
@@ -518,9 +503,7 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
                     <div style={{ fontSize:10, color:COLORS.orange, fontWeight:700, marginBottom:4 }}>💰 مترتب للشركة</div>
                     <div style={{ fontSize:20, fontWeight:800, color:COLORS.orange }}>${fmt(dueUSD)}</div>
                     {dueLBP>0 && <div style={{ fontSize:10, color:COLORS.blue }}>{fmtLBP(dueLBP)} ل.ل</div>}
-                    {dueUSD>0 && (
-                      <div style={{ marginTop:6, background:COLORS.orange, borderRadius:8, padding:"5px 0", textAlign:"center", fontSize:11, fontWeight:700, color:"#fff" }}>تسديد الآن</div>
-                    )}
+                    {dueUSD>0 && <div style={{ marginTop:6, background:COLORS.orange, borderRadius:8, padding:"5px 0", textAlign:"center", fontSize:11, fontWeight:700, color:"#fff" }}>تسديد الآن</div>}
                     {dueUSD===0&&dueLBP===0 && <div style={{ fontSize:10, color:COLORS.green, marginTop:4 }}>✅ لا يوجد مترتب</div>}
                   </div>
                   <div style={{ background:"rgba(0,0,0,0.25)", borderRadius:14, padding:"10px 12px" }}>
@@ -1187,7 +1170,7 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
   const [convertAmount,setConvertAmount]=useState("");
   const [convertDir,setConvertDir]=useState("usd_to_lbp");
   const [showPassEditor,setShowPassEditor]=useState(false);
-  const [editUsers,setEditUsers]=useState(() => (data.users||DEFAULT_USERS).map(u=>({...u})));
+  const [editUsers,setEditUsers]=useState(()=>(data.users||DEFAULT_USERS).map(u=>({...u})));
 
   const saveRate=()=>{ const r=parseFloat(rateInput); if(r>0){persist(prev=>({...prev,exchangeRate:r}));showToast("تم تحديث سعر الصرف ✓");} setEditingRate(false); };
   const amt=parseFloat(convertAmount)||0;
@@ -1197,19 +1180,21 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
     persist(prev=>{ let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0; if(convertDir==="usd_to_lbp"){newUSD-=amt;newLBP+=amt*rate;}else{newLBP-=amt*1000;newUSD+=amt*1000/rate;} return {...prev,balanceUSD:newUSD,balanceLBP:newLBP}; });
     showToast("تم التحويل ✓"); setConvertAmount("");
   };
-
   const savePasswords=()=>{
     persist(prev=>({...prev,users:editUsers}));
     showToast("تم حفظ كلمات المرور ✓");
     setShowPassEditor(false);
+  };
+  const clearAllData=()=>{
+    const clean={...DEFAULT_DATA, users:data.users, exchangeRate:data.exchangeRate};
+    persist(()=>clean);
+    showToast("تم مسح كل البيانات ✓");
   };
 
   return (
     <div>
       <TopBar title="الإعدادات" />
       <div style={{ padding:"0 16px" }}>
-
-        {/* الرصيد */}
         <div style={{ background:`linear-gradient(135deg, ${COLORS.bgCard}, ${COLORS.bgCard2})`, border:`1px solid ${COLORS.border}`, borderRadius:18, padding:18, marginBottom:16 }}>
           <div style={{ fontSize:13, color:COLORS.textDim, fontWeight:700, marginBottom:12 }}>الرصيد الحالي</div>
           <div style={{ display:"flex", gap:10 }}>
@@ -1224,7 +1209,6 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
           </div>
         </div>
 
-        {/* تحويل العملة */}
         <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:showConvert?16:0 }}>
             <div style={{ fontWeight:800, fontSize:14 }}>🔄 تحويل العملة</div>
@@ -1251,7 +1235,6 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
           )}
         </div>
 
-        {/* سعر الصرف */}
         <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
           <div style={{ fontWeight:800, fontSize:14, marginBottom:10 }}>💱 سعر الصرف</div>
           {editingRate?(
@@ -1268,7 +1251,6 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
           )}
         </div>
 
-        {/* كلمات المرور — للأدمين فقط */}
         {currentUser?.role==="admin" && (
           <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:showPassEditor?16:0 }}>
@@ -1301,13 +1283,11 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
           </div>
         )}
 
-        {/* تعديل الرصيد */}
         <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
           <div style={{ fontWeight:800, fontSize:14, marginBottom:6 }}>✏️ تعديل الرصيد يدوياً</div>
           <ManualBalanceEditor data={data} persist={persist} showToast={showToast} />
         </div>
 
-        {/* معلومات المشاركة */}
         <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
           <div style={{ fontWeight:800, fontSize:14, marginBottom:8 }}>👥 مشاركة التطبيق</div>
           <div style={{ fontSize:12, color:COLORS.textDim, lineHeight:1.8 }}>
@@ -1317,6 +1297,16 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
             كلمة المرور: <span style={{ color:COLORS.text, fontWeight:700 }}>1234</span>
           </div>
         </div>
+
+        {currentUser?.role==="admin" && (
+          <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.red}40`, borderRadius:16, padding:16, marginBottom:14 }}>
+            <div style={{ fontWeight:800, fontSize:14, marginBottom:6, color:COLORS.red }}>⚠️ مسح كل البيانات</div>
+            <div style={{ fontSize:12, color:COLORS.textFaint, marginBottom:12 }}>سيمسح جميع الطلبات والشركات والمصروفات والديون ويصفر الرصيد. كلمات المرور وسعر الصرف لن تتأثر.</div>
+            <button onClick={clearAllData} style={{ width:"100%", background:`${COLORS.red}20`, border:`1px solid ${COLORS.red}`, borderRadius:10, padding:"13px", color:COLORS.red, fontWeight:800, fontSize:14, cursor:"pointer" }}>
+              🗑️ مسح كل البيانات
+            </button>
+          </div>
+        )}
 
         <button onClick={onLogout} style={{ width:"100%", background:COLORS.red, border:"none", borderRadius:14, padding:"14px", color:"#fff", fontSize:16, fontWeight:800, cursor:"pointer", marginBottom:20 }}>
           🔒 تسجيل الخروج
@@ -1353,4 +1343,4 @@ function ManualBalanceEditor({ data, persist, showToast }) {
       </div>
     </>
   );
-    }
+      }
