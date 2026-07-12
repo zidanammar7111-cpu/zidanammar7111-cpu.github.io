@@ -1350,4 +1350,7 @@ function ManualBalanceEditor({ data, persist, showToast }) {
       <div style={{ display:"flex", gap:8 }}>
         <button onClick={save} style={{ flex:1, background:COLORS.green, border:"none", borderRadius:10, padding:"12px", color:"#fff", fontWeight:700, cursor:"pointer" }}>حفظ</button>
         <button onClick={()=>setEditing(false)} style={{ flex:1, background:COLORS.bgCard2, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"12px", color:COLORS.textDim, fontWeight:700, cursor:"pointer" }}>إلغاء</button>
-      </d
+      </div>
+    </>
+  );
+    }
