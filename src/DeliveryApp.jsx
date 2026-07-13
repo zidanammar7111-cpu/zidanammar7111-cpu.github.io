@@ -397,11 +397,13 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
   const orders = data.orders || [];
   const todayStr = new Date().toDateString();
   const todayOrders = orders.filter(o => new Date(o.createdAt).toDateString()===todayStr);
-  const todayProfitUSD = todayOrders.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.profit||0),0);
-  const todayTipsUSD = todayOrders.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.tips||0),0);
+// نستخدم نفس الطلبات الموجودة بالضبط بدون أي فلتر إضافي
+  const todayProfitUSD = todayOrders.filter(o=>o.currency==="usd"&&!o.settled).reduce((s,o)=>s+(o.profit||0),0);
+  const todayProfitLBP = todayOrders.filter(o=>o.currency==="lbp"&&!o.settled).reduce((s,o)=>s+(o.profit||0)*1000,0);
+  const todayTipsUSD = todayOrders.filter(o=>o.currency==="usd"&&!o.settled).reduce((s,o)=>s+(o.tips||0),0);
+  const todayDueUSD = todayOrders.filter(o=>o.currency==="usd"&&!o.settled).reduce((s,o)=>s+(o.dueToCompany||0),0);
   const totalDueUSD = companies.reduce((s,c)=>s+getCompanyDue(data,c.id).dueUSD,0);
   const totalExpUSD = (data.expenses||[]).filter(e=>e.currency==="usd"&&e.affectsBalance!==false).reduce((s,e)=>s+(e.amount||0),0);
-
   const today = new Date();
   const dayNames = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
   const monthNames = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
