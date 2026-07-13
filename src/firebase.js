@@ -12,7 +12,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const DOC_REF = doc(db, "delivery_v3", "data");
+const DOC_REF = doc(db, "delivery_v5", "data");
 
 export async function loadFromCloud() {
   try {
