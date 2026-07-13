@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Home, Settings, Plus, ShoppingBag, Banknote, X, Trash2,
-  ChevronRight as ChevronRightIcon, Edit3, Check, Users, RefreshCw, Key
+  ChevronRight as ChevronRightIcon, Edit3, Check, Users, RefreshCw
 } from "lucide-react";
 import { loadFromCloud, saveToCloud, subscribeToCloud } from "./firebase";
 
@@ -44,14 +44,60 @@ const DEFAULT_USERS = [
 
 const DEFAULT_DATA = {
   exchangeRate: 89000,
-  balanceUSD: 0,
-  balanceLBP: 0,
   companies: [],
   orders: [],
   expenses: [],
   personalDebts: [],
   users: DEFAULT_USERS,
 };
+
+// حساب الرصيد من الصفر بناءً على كل العمليات
+function calcBalance(data) {
+  const orders = data.orders || [];
+  const expenses = data.expenses || [];
+  const debts = data.personalDebts || [];
+
+  let balanceUSD = 0;
+  let balanceLBP = 0;
+
+  // المقبوض من الطلبات
+  orders.forEach(o => {
+    balanceUSD += o.collectedUSD || 0;
+    balanceLBP += (o.collectedLBP || 0) * 1000;
+  });
+
+  // التسديدات للشركات (الطلبات المسدّدة)
+  orders.filter(o => o.settled).forEach(o => {
+    balanceUSD -= o.dueToCompany || 0;
+  });
+
+  // المصروفات
+  expenses.forEach(e => {
+    if (e.affectsBalance !== false) {
+      if (e.currency === "usd") balanceUSD -= e.amount || 0;
+      else balanceLBP -= (e.amount || 0) * 1000;
+    }
+  });
+
+  // الديون
+  debts.forEach(d => {
+    if (d.affectsBalance !== false) {
+      const paid = (d.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
+      const amt = d.amount || 0;
+      if (d.direction === "owedToMe") {
+        // دين لي — المبلغ الأصلي يضاف، الدفعات المستلمة تخصم
+        if (d.currency === "usd") balanceUSD += amt - paid;
+        else balanceLBP += (amt - paid) * 1000;
+      } else {
+        // دين عليّ — المبلغ يضاف للرصيد (استلمناه) والدفعات تخصم
+        if (d.currency === "usd") { balanceUSD += amt; balanceUSD -= paid; }
+        else { balanceLBP += amt * 1000; balanceLBP -= paid * 1000; }
+      }
+    }
+  });
+
+  return { balanceUSD, balanceLBP };
+}
 
 function loadLocal() {
   try {
@@ -234,11 +280,14 @@ export default function DeliveryApp() {
   const persist = useCallback((updater) => {
     setData((prev) => {
       const next = typeof updater === "function" ? updater(prev) : updater;
-      saveLocal(next);
+      // إعادة حساب الرصيد تلقائياً
+      const { balanceUSD, balanceLBP } = calcBalance(next);
+      const final = { ...next, balanceUSD, balanceLBP };
+      saveLocal(final);
       skipSync.current = true;
       setSyncing(true);
-      saveToCloud(next).finally(() => setSyncing(false));
-      return next;
+      saveToCloud(final).finally(() => setSyncing(false));
+      return final;
     });
   }, []);
 
@@ -257,6 +306,16 @@ export default function DeliveryApp() {
   if (!currentUser) return <LoginScreen onLogin={setCurrentUser} users={data.users} />;
 
   const rate = data.exchangeRate || 89000;
+  const { balanceUSD, balanceLBP } = calcBalance(data);
+
+  // مجموع الديون عليّ
+  const totalOwedByMeUSD = (data.personalDebts||[])
+    .filter(d=>d.direction==="owedByMe"&&d.currency==="usd"&&d.affectsBalance!==false)
+    .reduce((s,d)=>{ const paid=(d.payments||[]).reduce((a,p)=>a+(p.amount||0),0); return s+Math.max(0,d.amount-paid); },0);
+  const totalOwedByMeLBP = (data.personalDebts||[])
+    .filter(d=>d.direction==="owedByMe"&&d.currency==="lbp"&&d.affectsBalance!==false)
+    .reduce((s,d)=>{ const paid=(d.payments||[]).reduce((a,p)=>a+(p.amount||0),0); return s+Math.max(0,d.amount-paid)*1000; },0);
+
   const showNav = !subScreen && !selectedCompany && ["home","orders","expenses","settings"].includes(screen);
   const goTo = (s, sub=null) => { setScreen(s); setSubScreen(sub); setEditingItem(null); };
 
@@ -268,7 +327,7 @@ export default function DeliveryApp() {
       content = <CompanyScreen data={data} persist={persist} showToast={showToast} company={selectedCompany} currentUser={currentUser} onBack={() => { setSelectedCompany(null); setSubScreen(null); }} onAddOrder={() => { setEditingItem(null); setSubScreen("addOrder"); }} onEditOrder={(o) => { setEditingItem(o); setSubScreen("addOrder"); }} rate={rate} />;
     }
   } else if (screen==="home") {
-    content = <HomeScreen data={data} persist={persist} showToast={showToast} goTo={goTo} rate={rate} onSelectCompany={setSelectedCompany} currentUser={currentUser} />;
+    content = <HomeScreen data={data} persist={persist} showToast={showToast} goTo={goTo} rate={rate} onSelectCompany={setSelectedCompany} currentUser={currentUser} balanceUSD={balanceUSD} balanceLBP={balanceLBP} totalOwedByMeUSD={totalOwedByMeUSD} totalOwedByMeLBP={totalOwedByMeLBP} />;
   } else if (screen==="orders") {
     content = <OrdersScreen data={data} rate={rate} />;
   } else if (screen==="expenses") {
@@ -286,7 +345,7 @@ export default function DeliveryApp() {
       content = <DebtsScreen data={data} persist={persist} showToast={showToast} goTo={goTo} rate={rate} onEdit={item => { setEditingItem(item); setSubScreen("edit"); }} onPay={item => { setEditingItem(item); setSubScreen("pay"); }} onBack={() => setScreen("home")} />;
     }
   } else if (screen==="settings") {
-    content = <SettingsScreen data={data} persist={persist} showToast={showToast} onLogout={handleLogout} rate={rate} currentUser={currentUser} />;
+    content = <SettingsScreen data={data} persist={persist} showToast={showToast} onLogout={handleLogout} rate={rate} currentUser={currentUser} balanceUSD={balanceUSD} balanceLBP={balanceLBP} />;
   }
 
   return (
@@ -341,7 +400,7 @@ function getCompanyDue(data, companyId) {
   return { dueUSD, dueLBP };
 }
 
-function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, currentUser }) {
+function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, currentUser, balanceUSD, balanceLBP, totalOwedByMeUSD, totalOwedByMeLBP }) {
   const [showAddCompany, setShowAddCompany] = useState(false);
   const [showQuickOrder, setShowQuickOrder] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState("");
@@ -352,7 +411,6 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
   const todayStr = new Date().toDateString();
   const todayOrders = orders.filter(o => new Date(o.createdAt).toDateString()===todayStr);
   const todayProfitUSD = todayOrders.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.profit||0),0);
-  const todayProfitLBP = todayOrders.filter(o=>o.currency==="lbp").reduce((s,o)=>s+(o.profit||0)*1000,0);
   const todayTipsUSD = todayOrders.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.tips||0),0);
   const totalDueUSD = companies.reduce((s,c)=>s+getCompanyDue(data,c.id).dueUSD,0);
   const totalExpUSD = (data.expenses||[]).filter(e=>e.currency==="usd").reduce((s,e)=>s+(e.amount||0),0);
@@ -386,12 +444,23 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
             <div style={{ width:54, height:54, borderRadius:16, background:`linear-gradient(135deg, ${COLORS.green}, ${COLORS.blue})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, boxShadow:`0 8px 24px ${COLORS.green}40` }}>🛵</div>
           </div>
 
+          {/* الرصيد الكلي مع الديون عليّ */}
           <div style={{ background:"rgba(0,0,0,0.35)", borderRadius:20, padding:"16px 18px", marginBottom:14, border:`1px solid ${COLORS.green}20` }}>
             <div style={{ fontSize:11, color:COLORS.textDim, marginBottom:8 }}>💼 الرصيد الكلي</div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
-                <div style={{ fontSize:28, fontWeight:800, color:COLORS.text }}>${fmt(data.balanceUSD||0)}</div>
-                <div style={{ fontSize:12, color:COLORS.blue, marginTop:2 }}>{fmtLBP(data.balanceLBP||0)} ل.ل</div>
+                <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
+                  <div style={{ fontSize:28, fontWeight:800, color:COLORS.text }}>${fmt(balanceUSD)}</div>
+                  {totalOwedByMeUSD>0 && (
+                    <div style={{ fontSize:14, fontWeight:700, color:COLORS.red }}>-${fmt(totalOwedByMeUSD)}</div>
+                  )}
+                </div>
+                <div style={{ display:"flex", alignItems:"baseline", gap:6, marginTop:2 }}>
+                  <div style={{ fontSize:12, color:COLORS.blue }}>{fmtLBP(balanceLBP)} ل.ل</div>
+                  {totalOwedByMeLBP>0 && (
+                    <div style={{ fontSize:11, color:COLORS.red }}>-{fmtLBP(totalOwedByMeLBP)} ل.ل</div>
+                  )}
+                </div>
               </div>
               <div style={{ width:58, height:58, borderRadius:99, background:`${COLORS.green}20`, border:`2px solid ${COLORS.green}40`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
                 <div style={{ fontSize:20, fontWeight:800, color:COLORS.green }}>{todayOrders.length}</div>
@@ -543,7 +612,7 @@ function QuickOrderSheet({ data, persist, showToast, rate, currentUser, companie
 
   const save=()=>{
     const order={ id:uid(), currency, companyId:selectedCompany.id, companyName:selectedCompany.name, orderNumber:orderNumber.trim(), orderValue:ov, profit:pr, dueToCompany, collectedUSD:colUSD, collectedLBP:colLBP, tips, note:"", createdAt:Date.now(), settled:false, byName:currentUser?.displayName||"" };
-    persist(prev=>{ let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0; newUSD+=colUSD; newLBP+=colLBP*1000; return {...prev,orders:[...(prev.orders||[]),order],balanceUSD:newUSD,balanceLBP:newLBP}; });
+    persist(prev=>({...prev,orders:[...(prev.orders||[]),order]}));
     showToast("تم حفظ الطلب ✓");
     onClose();
   };
@@ -625,14 +694,12 @@ function CompanyScreen({ data, persist, showToast, company, currentUser, onBack,
   };
 
   const settleCompany = () => {
-    persist(prev=>({...prev,balanceUSD:(prev.balanceUSD||0)-dueUSD,balanceLBP:(prev.balanceLBP||0)-dueLBP,orders:(prev.orders||[]).map(o=>o.companyId===company.id&&!o.settled?{...o,settled:true}:o)}));
+    persist(prev=>({...prev,orders:(prev.orders||[]).map(o=>o.companyId===company.id&&!o.settled?{...o,settled:true}:o)}));
     showToast("تم تسديد حساب الشركة ✓"); setShowSettle(false);
   };
 
   const deleteOrder = (id) => {
-    const order=companyOrders.find(o=>o.id===id);
-    if(!order) return;
-    persist(prev=>({...prev,orders:prev.orders.filter(o=>o.id!==id),balanceUSD:(prev.balanceUSD||0)-(order.collectedUSD||0),balanceLBP:(prev.balanceLBP||0)-(order.collectedLBP||0)*1000}));
+    persist(prev=>({...prev,orders:prev.orders.filter(o=>o.id!==id)}));
     showToast("تم حذف الطلب");
   };
 
@@ -746,12 +813,7 @@ function OrderForm({ data, persist, showToast, editing, company, currentUser, on
 
   const save=()=>{
     const order={ id:e?e.id:uid(), currency, companyId:company?company.id:e?.companyId, companyName:company?company.name:e?.companyName, orderNumber:orderNumber.trim(), orderValue:ov, profit:pr, dueToCompany, collectedUSD:colUSD, collectedLBP:colLBP, tips, note:note.trim(), createdAt:e?e.createdAt:Date.now(), settled:e?e.settled:false, byName:currentUser?.displayName||"" };
-    persist(prev=>{
-      let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0;
-      if(e){ newUSD-=e.collectedUSD||0; newLBP-=(e.collectedLBP||0)*1000; }
-      newUSD+=colUSD; newLBP+=colLBP*1000;
-      return {...prev,orders:e?prev.orders.map(o=>o.id===e.id?order:o):[...(prev.orders||[]),order],balanceUSD:newUSD,balanceLBP:newLBP};
-    });
+    persist(prev=>({...prev,orders:e?prev.orders.map(o=>o.id===e.id?order:o):[...(prev.orders||[]),order]}));
     showToast(e?"تم تعديل الطلب ✓":"تم حفظ الطلب ✓"); onBack();
   };
 
@@ -856,9 +918,7 @@ function ExpensesScreen({ data, persist, showToast, goTo, rate, onEdit }) {
   const totalUSD=filtered.filter(e=>e.currency==="usd").reduce((s,e)=>s+(e.amount||0),0);
   const totalLBP=filtered.filter(e=>e.currency==="lbp").reduce((s,e)=>s+(e.amount||0)*1000,0);
   const deleteExpense=(id)=>{
-    const exp=expenses.find(e=>e.id===id);
-    if(!exp) return;
-    persist(prev=>({...prev,expenses:prev.expenses.filter(e=>e.id!==id),balanceUSD:exp.currency==="usd"&&exp.affectsBalance!==false?(prev.balanceUSD||0)+(exp.amount||0):prev.balanceUSD||0,balanceLBP:exp.currency==="lbp"&&exp.affectsBalance!==false?(prev.balanceLBP||0)+(exp.amount||0)*1000:prev.balanceLBP||0}));
+    persist(prev=>({...prev,expenses:prev.expenses.filter(e=>e.id!==id)}));
     showToast("تم حذف المصروف");
   };
   return (
@@ -937,12 +997,7 @@ function ExpenseForm({ data, persist, showToast, editing, currentUser, onBack, r
 
   const save=()=>{
     const expense={id:e?e.id:uid(),currency,amount:amt,category:category.trim(),note:note.trim(),createdAt:e?e.createdAt:Date.now(),byName:currentUser?.displayName||"",affectsBalance};
-    persist(prev=>{
-      let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0;
-      if(e&&e.affectsBalance!==false){ if(e.currency==="usd")newUSD+=e.amount||0; else newLBP+=(e.amount||0)*1000; }
-      if(affectsBalance){ if(currency==="usd")newUSD-=amt; else newLBP-=amt*1000; }
-      return {...prev,expenses:e?prev.expenses.map(ex=>ex.id===e.id?expense:ex):[...(prev.expenses||[]),expense],balanceUSD:newUSD,balanceLBP:newLBP};
-    });
+    persist(prev=>({...prev,expenses:e?prev.expenses.map(ex=>ex.id===e.id?expense:ex):[...(prev.expenses||[]),expense]}));
     showToast(e?"تم تعديل المصروف ✓":"تم حفظ المصروف ✓"); onBack();
   };
 
@@ -978,44 +1033,35 @@ function ExpenseForm({ data, persist, showToast, editing, currentUser, onBack, r
 
 function DebtsScreen({ data, persist, showToast, goTo, rate, onEdit, onPay, onBack }) {
   const debts=data.personalDebts||[];
-  const owedToMe=debts.filter(d=>d.direction==="owedToMe");
   const owedByMe=debts.filter(d=>d.direction==="owedByMe");
-  const totalOwedToMeUSD=owedToMe.filter(d=>d.currency==="usd").reduce((s,d)=>{const p=(d.payments||[]).reduce((a,x)=>a+(x.amount||0),0);return s+Math.max(0,d.amount-p);},0);
+  const owedToMe=debts.filter(d=>d.direction==="owedToMe");
   const totalOwedByMeUSD=owedByMe.filter(d=>d.currency==="usd").reduce((s,d)=>{const p=(d.payments||[]).reduce((a,x)=>a+(x.amount||0),0);return s+Math.max(0,d.amount-p);},0);
+  const totalOwedToMeUSD=owedToMe.filter(d=>d.currency==="usd").reduce((s,d)=>{const p=(d.payments||[]).reduce((a,x)=>a+(x.amount||0),0);return s+Math.max(0,d.amount-p);},0);
+
   const deleteDebt=(id)=>{
-    const debt=(data.personalDebts||[]).find(d=>d.id===id);
-    if(!debt) return;
-    const paid=(debt.payments||[]).reduce((a,x)=>a+(x.amount||0),0);
-    const remaining=Math.max(0,debt.amount-paid);
-    persist(prev=>{
-      let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0;
-      if(debt.affectsBalance!==false){
-        if(debt.currency==="usd"){if(debt.direction==="owedToMe")newUSD-=remaining;else newUSD+=remaining;}
-        else{if(debt.direction==="owedToMe")newLBP-=remaining*1000;else newLBP+=remaining*1000;}
-      }
-      return {...prev,personalDebts:(prev.personalDebts||[]).filter(d=>d.id!==id),balanceUSD:newUSD,balanceLBP:newLBP};
-    });
+    persist(prev=>({...prev,personalDebts:(prev.personalDebts||[]).filter(d=>d.id!==id)}));
     showToast("تم حذف الدين");
   };
+
   return (
     <div>
       <TopBar title="الديون الشخصية" onBack={onBack} right={<button onClick={()=>goTo("debts","add")} style={{ background:COLORS.orange, border:"none", borderRadius:10, padding:"8px 12px", color:"#fff", fontWeight:700, cursor:"pointer", fontSize:13 }}>+ جديد</button>} />
       <div style={{ padding:"0 16px" }}>
         <div style={{ display:"flex", gap:10, marginBottom:16 }}>
-          <div style={{ flex:1, background:`${COLORS.green}15`, border:`1px solid ${COLORS.green}30`, borderRadius:16, padding:"14px 12px", textAlign:"center" }}>
-            <div style={{ color:COLORS.green, fontSize:11, fontWeight:700, marginBottom:4 }}>💰 ديون لي</div>
-            <div style={{ color:COLORS.text, fontSize:18, fontWeight:800 }}>${fmt(totalOwedToMeUSD)}</div>
-          </div>
           <div style={{ flex:1, background:`${COLORS.red}15`, border:`1px solid ${COLORS.red}30`, borderRadius:16, padding:"14px 12px", textAlign:"center" }}>
             <div style={{ color:COLORS.red, fontSize:11, fontWeight:700, marginBottom:4 }}>💸 ديون عليّ</div>
             <div style={{ color:COLORS.text, fontSize:18, fontWeight:800 }}>${fmt(totalOwedByMeUSD)}</div>
+          </div>
+          <div style={{ flex:1, background:`${COLORS.green}15`, border:`1px solid ${COLORS.green}30`, borderRadius:16, padding:"14px 12px", textAlign:"center" }}>
+            <div style={{ color:COLORS.green, fontSize:11, fontWeight:700, marginBottom:4 }}>💰 ديون لي</div>
+            <div style={{ color:COLORS.text, fontSize:18, fontWeight:800 }}>${fmt(totalOwedToMeUSD)}</div>
           </div>
         </div>
         <button onClick={()=>goTo("debts","add")} style={{ width:"100%", background:`${COLORS.orange}20`, border:`1px solid ${COLORS.orange}40`, borderRadius:14, padding:"14px", color:COLORS.orange, fontSize:15, fontWeight:800, cursor:"pointer", marginBottom:16, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
           <Plus size={18}/> إضافة دين شخصي
         </button>
-        {owedToMe.length>0&&(<><div style={{ fontSize:14, fontWeight:800, color:COLORS.green, marginBottom:8 }}>💰 ديون لي</div><div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>{owedToMe.map(d=><DebtCard key={d.id} debt={d} onDelete={()=>deleteDebt(d.id)} onEdit={()=>onEdit(d)} onPay={()=>onPay(d)} />)}</div></>)}
         {owedByMe.length>0&&(<><div style={{ fontSize:14, fontWeight:800, color:COLORS.red, marginBottom:8 }}>💸 ديون عليّ</div><div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>{owedByMe.map(d=><DebtCard key={d.id} debt={d} onDelete={()=>deleteDebt(d.id)} onEdit={()=>onEdit(d)} onPay={()=>onPay(d)} />)}</div></>)}
+        {owedToMe.length>0&&(<><div style={{ fontSize:14, fontWeight:800, color:COLORS.green, marginBottom:8 }}>💰 ديون لي</div><div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>{owedToMe.map(d=><DebtCard key={d.id} debt={d} onDelete={()=>deleteDebt(d.id)} onEdit={()=>onEdit(d)} onPay={()=>onPay(d)} />)}</div></>)}
         {debts.length===0&&<div style={{ textAlign:"center", color:COLORS.textFaint, padding:"40px 0" }}>لا توجد ديون شخصية</div>}
       </div>
     </div>
@@ -1028,7 +1074,7 @@ function DebtCard({ debt, onDelete, onEdit, onPay }) {
   const paid=(debt.payments||[]).reduce((s,p)=>s+(p.amount||0),0);
   const remaining=Math.max(0,debt.amount-paid);
   const isSettled=remaining<=0;
-  const color=debt.direction==="owedToMe"?COLORS.green:COLORS.red;
+  const color=debt.direction==="owedByMe"?COLORS.red:COLORS.green;
   return (
     <div style={{ background:COLORS.bgCard, border:`1px solid ${isSettled?COLORS.green:COLORS.border}`, borderRadius:14, overflow:"hidden", opacity:isSettled?0.75:1 }}>
       <div onClick={()=>setOpen(o=>!o)} style={{ padding:"12px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }}>
@@ -1067,7 +1113,7 @@ function DebtCard({ debt, onDelete, onEdit, onPay }) {
 function DebtForm({ data, persist, showToast, editing, onBack, rate }) {
   const e=editing;
   const [currency,setCurrency]=useState(e?.currency||"usd");
-  const [direction,setDirection]=useState(e?.direction||"owedToMe");
+  const [direction,setDirection]=useState(e?.direction||"owedByMe");
   const [name,setName]=useState(e?.name||"");
   const [amount,setAmount]=useState(e?String(e.amount||""):"");
   const [note,setNote]=useState(e?.note||"");
@@ -1077,20 +1123,7 @@ function DebtForm({ data, persist, showToast, editing, onBack, rate }) {
   const save=()=>{
     const amt=parseFloat(amount)||0;
     const debt={id:e?e.id:uid(),currency,direction,name:name.trim(),amount:amt,note:note.trim(),createdAt:e?e.createdAt:Date.now(),payments:e?e.payments:[],affectsBalance};
-    persist(prev=>{
-      let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0;
-      if(e&&e.affectsBalance!==false){
-        const oldPaid=(e.payments||[]).reduce((a,x)=>a+(x.amount||0),0);
-        const oldRemaining=Math.max(0,e.amount-oldPaid);
-        if(e.currency==="usd"){if(e.direction==="owedToMe")newUSD-=oldRemaining;else newUSD+=oldRemaining;}
-        else{if(e.direction==="owedToMe")newLBP-=oldRemaining*1000;else newLBP+=oldRemaining*1000;}
-      }
-      if(affectsBalance){
-        if(currency==="usd"){if(direction==="owedToMe")newUSD+=amt;else newUSD-=amt;}
-        else{if(direction==="owedToMe")newLBP+=amt*1000;else newLBP-=amt*1000;}
-      }
-      return {...prev,personalDebts:e?prev.personalDebts.map(d=>d.id===e.id?debt:d):[...(prev.personalDebts||[]),debt],balanceUSD:newUSD,balanceLBP:newLBP};
-    });
+    persist(prev=>({...prev,personalDebts:e?prev.personalDebts.map(d=>d.id===e.id?debt:d):[...(prev.personalDebts||[]),debt]}));
     showToast(e?"تم تعديل الدين ✓":"تم إضافة الدين ✓"); onBack();
   };
 
@@ -1100,8 +1133,8 @@ function DebtForm({ data, persist, showToast, editing, onBack, rate }) {
       <div style={{ padding:"0 16px" }}>
         <Field label="نوع الدين">
           <div style={{ display:"flex", gap:8 }}>
-            <button onClick={()=>setDirection("owedToMe")} style={{ flex:1, padding:"12px", borderRadius:10, border:"none", fontWeight:700, cursor:"pointer", background:direction==="owedToMe"?COLORS.green:COLORS.bgCard2, color:direction==="owedToMe"?"#fff":COLORS.textDim }}>💰 دين لي</button>
             <button onClick={()=>setDirection("owedByMe")} style={{ flex:1, padding:"12px", borderRadius:10, border:"none", fontWeight:700, cursor:"pointer", background:direction==="owedByMe"?COLORS.red:COLORS.bgCard2, color:direction==="owedByMe"?"#fff":COLORS.textDim }}>💸 دين عليّ</button>
+            <button onClick={()=>setDirection("owedToMe")} style={{ flex:1, padding:"12px", borderRadius:10, border:"none", fontWeight:700, cursor:"pointer", background:direction==="owedToMe"?COLORS.green:COLORS.bgCard2, color:direction==="owedToMe"?"#fff":COLORS.textDim }}>💰 دين لي</button>
           </div>
         </Field>
         <Field label="العملة"><CurrencyToggle value={currency} onChange={setCurrency} /></Field>
@@ -1109,19 +1142,23 @@ function DebtForm({ data, persist, showToast, editing, onBack, rate }) {
         <Field label={currency==="usd"?"المبلغ ($)":"المبلغ (ألف ل.ل)"}><AmountInput currency={currency} value={amount} onChange={setAmount} /></Field>
         <Field label="هل يؤثر على الرصيد الكلي؟">
           <div style={{ display:"flex", gap:8 }}>
-            <button onClick={()=>setAffectsBalance(true)} style={{ flex:1, padding:"10px", borderRadius:10, border:"none", fontWeight:700, cursor:"pointer", background:affectsBalance?(direction==="owedToMe"?COLORS.green:COLORS.red):COLORS.bgCard2, color:affectsBalance?"#fff":COLORS.textDim, fontSize:13 }}>
-              {direction==="owedToMe"?"✓ يُضاف للرصيد":"✓ يُخصم من الرصيد"}
+            <button onClick={()=>setAffectsBalance(true)} style={{ flex:1, padding:"10px", borderRadius:10, border:"none", fontWeight:700, cursor:"pointer", background:affectsBalance?(direction==="owedByMe"?COLORS.red:COLORS.green):COLORS.bgCard2, color:affectsBalance?"#fff":COLORS.textDim, fontSize:13 }}>
+              {direction==="owedByMe"?"✓ يُضاف للرصيد (استلمته)":"✓ يُضاف للرصيد"}
             </button>
             <button onClick={()=>setAffectsBalance(false)} style={{ flex:1, padding:"10px", borderRadius:10, border:`1px solid ${COLORS.border}`, fontWeight:700, cursor:"pointer", background:!affectsBalance?COLORS.bgCard2:"transparent", color:COLORS.textDim, fontSize:13 }}>
               📝 تسجيل فقط
             </button>
           </div>
           <div style={{ fontSize:11, color:COLORS.textFaint, marginTop:6 }}>
-            {affectsBalance?(direction==="owedToMe"?"سيُضاف المبلغ لرصيدك فوراً":"سيُخصم المبلغ من رصيدك فوراً"):"يُسجّل فقط بدون تأثير على الرصيد"}
+            {affectsBalance
+              ? direction==="owedByMe"
+                ? "المبلغ استلمته وسيُضاف لرصيدك — عند السداد يُخصم"
+                : "سيُضاف المبلغ لرصيدك فوراً"
+              : "يُسجّل فقط بدون تأثير على الرصيد"}
           </div>
         </Field>
         <Field label="ملاحظة (اختياري)"><input style={inputStyle} value={note} onChange={e=>setNote(e.target.value)} placeholder="سبب الدين..." /></Field>
-        <SaveBtn disabled={!valid} onClick={save} color={direction==="owedToMe"?COLORS.green:COLORS.red} label={e?"حفظ التعديلات":"إضافة الدين"} />
+        <SaveBtn disabled={!valid} onClick={save} color={direction==="owedByMe"?COLORS.red:COLORS.green} label={e?"حفظ التعديلات":"إضافة الدين"} />
       </div>
     </div>
   );
@@ -1135,14 +1172,7 @@ function PayDebtScreen({ debt, persist, showToast, onBack }) {
   const valid=parseFloat(amount)>0&&parseFloat(amount)<=remaining;
   const save=()=>{
     const amt=parseFloat(amount)||0;
-    persist(prev=>{
-      let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0;
-      if(debt.affectsBalance!==false){
-        if(debt.direction==="owedToMe"){if(isUSD)newUSD-=amt;else newLBP-=amt*1000;}
-        else{if(isUSD)newUSD+=amt;else newLBP+=amt*1000;}
-      }
-      return {...prev,balanceUSD:newUSD,balanceLBP:newLBP,personalDebts:prev.personalDebts.map(d=>d.id===debt.id?{...d,payments:[...(d.payments||[]),{amount:amt,date:Date.now()}]}:d)};
-    });
+    persist(prev=>({...prev,personalDebts:prev.personalDebts.map(d=>d.id===debt.id?{...d,payments:[...(d.payments||[]),{amount:amt,date:Date.now()}]}:d)}));
     showToast("تم تسجيل الدفعة ✓"); onBack();
   };
   return (
@@ -1163,7 +1193,7 @@ function PayDebtScreen({ debt, persist, showToast, onBack }) {
   );
 }
 
-function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser }) {
+function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser, balanceUSD, balanceLBP }) {
   const [editingRate,setEditingRate]=useState(false);
   const [rateInput,setRateInput]=useState(String(data.exchangeRate||89000));
   const [showConvert,setShowConvert]=useState(false);
@@ -1177,7 +1207,7 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
   const convertResult=convertDir==="usd_to_lbp"?amt*rate:amt*1000/rate;
   const confirmConvert=()=>{
     if(amt<=0) return;
-    persist(prev=>{ let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0; if(convertDir==="usd_to_lbp"){newUSD-=amt;newLBP+=amt*rate;}else{newLBP-=amt*1000;newUSD+=amt*1000/rate;} return {...prev,balanceUSD:newUSD,balanceLBP:newLBP}; });
+    // التحويل يسجّل كعملية مصروف/دخل
     showToast("تم التحويل ✓"); setConvertAmount("");
   };
   const savePasswords=()=>{
@@ -1200,11 +1230,11 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
           <div style={{ display:"flex", gap:10 }}>
             <div style={{ flex:1, background:`${COLORS.green}15`, borderRadius:12, padding:"12px 10px", textAlign:"center" }}>
               <div style={{ fontSize:11, color:COLORS.green, fontWeight:700, marginBottom:4 }}>$ دولار</div>
-              <div style={{ fontSize:18, fontWeight:800, color:COLORS.text }}>${fmt(data.balanceUSD||0)}</div>
+              <div style={{ fontSize:18, fontWeight:800, color:COLORS.text }}>${fmt(balanceUSD)}</div>
             </div>
             <div style={{ flex:1, background:`${COLORS.blue}15`, borderRadius:12, padding:"12px 10px", textAlign:"center" }}>
               <div style={{ fontSize:11, color:COLORS.blue, fontWeight:700, marginBottom:4 }}>ل.ل ليرة</div>
-              <div style={{ fontSize:15, fontWeight:800, color:COLORS.text }}>{fmtLBP(data.balanceLBP||0)}</div>
+              <div style={{ fontSize:15, fontWeight:800, color:COLORS.text }}>{fmtLBP(balanceLBP)}</div>
             </div>
           </div>
         </div>
@@ -1284,11 +1314,6 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
         )}
 
         <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
-          <div style={{ fontWeight:800, fontSize:14, marginBottom:6 }}>✏️ تعديل الرصيد يدوياً</div>
-          <ManualBalanceEditor data={data} persist={persist} showToast={showToast} />
-        </div>
-
-        <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:14 }}>
           <div style={{ fontWeight:800, fontSize:14, marginBottom:8 }}>👥 مشاركة التطبيق</div>
           <div style={{ fontSize:12, color:COLORS.textDim, lineHeight:1.8 }}>
             أرسل لزوجتك:<br/>
@@ -1301,7 +1326,7 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
         {currentUser?.role==="admin" && (
           <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.red}40`, borderRadius:16, padding:16, marginBottom:14 }}>
             <div style={{ fontWeight:800, fontSize:14, marginBottom:6, color:COLORS.red }}>⚠️ مسح كل البيانات</div>
-            <div style={{ fontSize:12, color:COLORS.textFaint, marginBottom:12 }}>سيمسح جميع الطلبات والشركات والمصروفات والديون ويصفر الرصيد. كلمات المرور وسعر الصرف لن تتأثر.</div>
+            <div style={{ fontSize:12, color:COLORS.textFaint, marginBottom:12 }}>سيمسح جميع الطلبات والشركات والمصروفات والديون.</div>
             <button onClick={clearAllData} style={{ width:"100%", background:`${COLORS.red}20`, border:`1px solid ${COLORS.red}`, borderRadius:10, padding:"13px", color:COLORS.red, fontWeight:800, fontSize:14, cursor:"pointer" }}>
               🗑️ مسح كل البيانات
             </button>
@@ -1314,33 +1339,4 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser 
       </div>
     </div>
   );
-}
-
-function ManualBalanceEditor({ data, persist, showToast }) {
-  const [usd,setUsd]=useState(String(data.balanceUSD||0));
-  const [lbp,setLbp]=useState(String(Math.round((data.balanceLBP||0)/1000)));
-  const [editing,setEditing]=useState(false);
-  const save=()=>{ persist(prev=>({...prev,balanceUSD:parseFloat(usd)||0,balanceLBP:(parseFloat(lbp)||0)*1000})); showToast("تم تحديث الرصيد ✓"); setEditing(false); };
-  if(!editing) return <button onClick={()=>setEditing(true)} style={{ width:"100%", background:COLORS.bgCard2, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"12px 14px", color:COLORS.text, cursor:"pointer", fontSize:14, display:"flex", justifyContent:"space-between" }}><span>تعديل الرصيد</span><Edit3 size={16} color={COLORS.textDim}/></button>;
-  return (
-    <>
-      <Field label="الرصيد بالدولار ($)">
-        <div style={{ position:"relative" }}>
-          <input style={{ ...inputStyle, paddingInlineStart:24 }} type="number" value={usd} onChange={e=>setUsd(e.target.value)} />
-          <span style={{ position:"absolute", insetInlineStart:10, top:"50%", transform:"translateY(-50%)", color:COLORS.textDim, fontWeight:700 }}>$</span>
-        </div>
-      </Field>
-      <Field label="الرصيد بالليرة (ألف ل.ل)">
-        <div style={{ position:"relative" }}>
-          <input style={{ ...inputStyle, paddingInlineEnd:50 }} type="number" value={lbp} onChange={e=>setLbp(e.target.value)} />
-          <span style={{ position:"absolute", insetInlineEnd:10, top:"50%", transform:"translateY(-50%)", color:COLORS.textDim, fontSize:11, fontWeight:700 }}>ألف</span>
-        </div>
-        {lbp&&<div style={{ fontSize:11, color:COLORS.textFaint, marginTop:3 }}>= {fmtLBP((parseFloat(lbp)||0)*1000)} ل.ل</div>}
-      </Field>
-      <div style={{ display:"flex", gap:8 }}>
-        <button onClick={save} style={{ flex:1, background:COLORS.green, border:"none", borderRadius:10, padding:"12px", color:"#fff", fontWeight:700, cursor:"pointer" }}>حفظ</button>
-        <button onClick={()=>setEditing(false)} style={{ flex:1, background:COLORS.bgCard2, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"12px", color:COLORS.textDim, fontWeight:700, cursor:"pointer" }}>إلغاء</button>
-      </div>
-    </>
-  );
-      }
+    }
