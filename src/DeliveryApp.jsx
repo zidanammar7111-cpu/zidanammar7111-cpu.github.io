@@ -17,7 +17,8 @@ const COMPANY_COLORS = ["#ff4d6d","#4f8ef7","#00c896","#ff8c42","#b06cf3","#ffd1
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const fmt = (n, d=2) => Number(n||0).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
 const fmtLBP = (n) => Number(n||0).toLocaleString("en-US",{maximumFractionDigits:0});
-const LOCAL_KEY = "delivery_v4_local";
+const LOCAL_KEY = "delivery_v5_local";
+const DATA_VERSION = "v5";
 
 const DAILY_QUOTES = [
   "كل يوم جديد هو فرصة جديدة لتحقيق أهدافك 🌅",
@@ -49,53 +50,38 @@ const DEFAULT_DATA = {
   expenses: [],
   personalDebts: [],
   users: DEFAULT_USERS,
+  _version: DATA_VERSION,
 };
 
-// حساب الرصيد من الصفر بناءً على كل العمليات
 function calcBalance(data) {
   const orders = data.orders || [];
   const expenses = data.expenses || [];
   const debts = data.personalDebts || [];
-
-  let balanceUSD = 0;
-  let balanceLBP = 0;
-
-  // المقبوض من الطلبات
+  let balanceUSD = 0, balanceLBP = 0;
   orders.forEach(o => {
     balanceUSD += o.collectedUSD || 0;
     balanceLBP += (o.collectedLBP || 0) * 1000;
   });
-
-  // التسديدات للشركات (الطلبات المسدّدة)
-  orders.filter(o => o.settled).forEach(o => {
-    balanceUSD -= o.dueToCompany || 0;
-  });
-
-  // المصروفات
+  orders.filter(o => o.settled).forEach(o => { balanceUSD -= o.dueToCompany || 0; });
   expenses.forEach(e => {
     if (e.affectsBalance !== false) {
       if (e.currency === "usd") balanceUSD -= e.amount || 0;
       else balanceLBP -= (e.amount || 0) * 1000;
     }
   });
-
-  // الديون
   debts.forEach(d => {
     if (d.affectsBalance !== false) {
       const paid = (d.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
       const amt = d.amount || 0;
       if (d.direction === "owedToMe") {
-        // دين لي — المبلغ الأصلي يضاف، الدفعات المستلمة تخصم
         if (d.currency === "usd") balanceUSD += amt - paid;
         else balanceLBP += (amt - paid) * 1000;
       } else {
-        // دين عليّ — المبلغ يضاف للرصيد (استلمناه) والدفعات تخصم
         if (d.currency === "usd") { balanceUSD += amt; balanceUSD -= paid; }
         else { balanceLBP += amt * 1000; balanceLBP -= paid * 1000; }
       }
     }
   });
-
   return { balanceUSD, balanceLBP };
 }
 
@@ -257,7 +243,8 @@ export default function DeliveryApp() {
 
   useEffect(() => {
     loadFromCloud().then(cloudData => {
-      if (cloudData) {
+      // فقط نقبل البيانات إذا كانت بالإصدار الصحيح
+      if (cloudData && cloudData._version === DATA_VERSION) {
         const merged = { ...DEFAULT_DATA, ...cloudData };
         if (!merged.users) merged.users = DEFAULT_USERS;
         setData(merged);
@@ -269,10 +256,12 @@ export default function DeliveryApp() {
   useEffect(() => {
     const unsub = subscribeToCloud((cloudData) => {
       if (skipSync.current) { skipSync.current = false; return; }
-      const merged = { ...DEFAULT_DATA, ...cloudData };
-      if (!merged.users) merged.users = DEFAULT_USERS;
-      setData(merged);
-      saveLocal(merged);
+      if (cloudData && cloudData._version === DATA_VERSION) {
+        const merged = { ...DEFAULT_DATA, ...cloudData };
+        if (!merged.users) merged.users = DEFAULT_USERS;
+        setData(merged);
+        saveLocal(merged);
+      }
     });
     return () => unsub();
   }, []);
@@ -280,9 +269,8 @@ export default function DeliveryApp() {
   const persist = useCallback((updater) => {
     setData((prev) => {
       const next = typeof updater === "function" ? updater(prev) : updater;
-      // إعادة حساب الرصيد تلقائياً
       const { balanceUSD, balanceLBP } = calcBalance(next);
-      const final = { ...next, balanceUSD, balanceLBP };
+      const final = { ...next, balanceUSD, balanceLBP, _version: DATA_VERSION };
       saveLocal(final);
       skipSync.current = true;
       setSyncing(true);
@@ -308,7 +296,6 @@ export default function DeliveryApp() {
   const rate = data.exchangeRate || 89000;
   const { balanceUSD, balanceLBP } = calcBalance(data);
 
-  // مجموع الديون عليّ
   const totalOwedByMeUSD = (data.personalDebts||[])
     .filter(d=>d.direction==="owedByMe"&&d.currency==="usd"&&d.affectsBalance!==false)
     .reduce((s,d)=>{ const paid=(d.payments||[]).reduce((a,p)=>a+(p.amount||0),0); return s+Math.max(0,d.amount-paid); },0);
@@ -413,7 +400,7 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
   const todayProfitUSD = todayOrders.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.profit||0),0);
   const todayTipsUSD = todayOrders.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.tips||0),0);
   const totalDueUSD = companies.reduce((s,c)=>s+getCompanyDue(data,c.id).dueUSD,0);
-  const totalExpUSD = (data.expenses||[]).filter(e=>e.currency==="usd").reduce((s,e)=>s+(e.amount||0),0);
+  const totalExpUSD = (data.expenses||[]).filter(e=>e.currency==="usd"&&e.affectsBalance!==false).reduce((s,e)=>s+(e.amount||0),0);
 
   const today = new Date();
   const dayNames = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
@@ -444,22 +431,17 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
             <div style={{ width:54, height:54, borderRadius:16, background:`linear-gradient(135deg, ${COLORS.green}, ${COLORS.blue})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, boxShadow:`0 8px 24px ${COLORS.green}40` }}>🛵</div>
           </div>
 
-          {/* الرصيد الكلي مع الديون عليّ */}
           <div style={{ background:"rgba(0,0,0,0.35)", borderRadius:20, padding:"16px 18px", marginBottom:14, border:`1px solid ${COLORS.green}20` }}>
             <div style={{ fontSize:11, color:COLORS.textDim, marginBottom:8 }}>💼 الرصيد الكلي</div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
                 <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
                   <div style={{ fontSize:28, fontWeight:800, color:COLORS.text }}>${fmt(balanceUSD)}</div>
-                  {totalOwedByMeUSD>0 && (
-                    <div style={{ fontSize:14, fontWeight:700, color:COLORS.red }}>-${fmt(totalOwedByMeUSD)}</div>
-                  )}
+                  {totalOwedByMeUSD>0 && <div style={{ fontSize:14, fontWeight:700, color:COLORS.red }}>-${fmt(totalOwedByMeUSD)}</div>}
                 </div>
                 <div style={{ display:"flex", alignItems:"baseline", gap:6, marginTop:2 }}>
                   <div style={{ fontSize:12, color:COLORS.blue }}>{fmtLBP(balanceLBP)} ل.ل</div>
-                  {totalOwedByMeLBP>0 && (
-                    <div style={{ fontSize:11, color:COLORS.red }}>-{fmtLBP(totalOwedByMeLBP)} ل.ل</div>
-                  )}
+                  {totalOwedByMeLBP>0 && <div style={{ fontSize:11, color:COLORS.red }}>-{fmtLBP(totalOwedByMeLBP)} ل.ل</div>}
                 </div>
               </div>
               <div style={{ width:58, height:58, borderRadius:99, background:`${COLORS.green}20`, border:`2px solid ${COLORS.green}40`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
@@ -1037,12 +1019,10 @@ function DebtsScreen({ data, persist, showToast, goTo, rate, onEdit, onPay, onBa
   const owedToMe=debts.filter(d=>d.direction==="owedToMe");
   const totalOwedByMeUSD=owedByMe.filter(d=>d.currency==="usd").reduce((s,d)=>{const p=(d.payments||[]).reduce((a,x)=>a+(x.amount||0),0);return s+Math.max(0,d.amount-p);},0);
   const totalOwedToMeUSD=owedToMe.filter(d=>d.currency==="usd").reduce((s,d)=>{const p=(d.payments||[]).reduce((a,x)=>a+(x.amount||0),0);return s+Math.max(0,d.amount-p);},0);
-
   const deleteDebt=(id)=>{
     persist(prev=>({...prev,personalDebts:(prev.personalDebts||[]).filter(d=>d.id!==id)}));
     showToast("تم حذف الدين");
   };
-
   return (
     <div>
       <TopBar title="الديون الشخصية" onBack={onBack} right={<button onClick={()=>goTo("debts","add")} style={{ background:COLORS.orange, border:"none", borderRadius:10, padding:"8px 12px", color:"#fff", fontWeight:700, cursor:"pointer", fontSize:13 }}>+ جديد</button>} />
@@ -1205,21 +1185,9 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser,
   const saveRate=()=>{ const r=parseFloat(rateInput); if(r>0){persist(prev=>({...prev,exchangeRate:r}));showToast("تم تحديث سعر الصرف ✓");} setEditingRate(false); };
   const amt=parseFloat(convertAmount)||0;
   const convertResult=convertDir==="usd_to_lbp"?amt*rate:amt*1000/rate;
-  const confirmConvert=()=>{
-    if(amt<=0) return;
-    // التحويل يسجّل كعملية مصروف/دخل
-    showToast("تم التحويل ✓"); setConvertAmount("");
-  };
-  const savePasswords=()=>{
-    persist(prev=>({...prev,users:editUsers}));
-    showToast("تم حفظ كلمات المرور ✓");
-    setShowPassEditor(false);
-  };
-  const clearAllData=()=>{
-    const clean={...DEFAULT_DATA, users:data.users, exchangeRate:data.exchangeRate};
-    persist(()=>clean);
-    showToast("تم مسح كل البيانات ✓");
-  };
+  const confirmConvert=()=>{ if(amt<=0) return; showToast("تم التحويل ✓"); setConvertAmount(""); };
+  const savePasswords=()=>{ persist(prev=>({...prev,users:editUsers})); showToast("تم حفظ كلمات المرور ✓"); setShowPassEditor(false); };
+  const clearAllData=()=>{ const clean={...DEFAULT_DATA,users:data.users,exchangeRate:data.exchangeRate}; persist(()=>clean); showToast("تم مسح كل البيانات ✓"); };
 
   return (
     <div>
@@ -1339,4 +1307,4 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser,
       </div>
     </div>
   );
-    }
+      }
