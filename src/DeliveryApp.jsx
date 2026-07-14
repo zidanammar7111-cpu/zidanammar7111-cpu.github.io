@@ -49,6 +49,7 @@ const DEFAULT_DATA = {
   orders: [],
   expenses: [],
   personalDebts: [],
+  conversions: [],
   users: DEFAULT_USERS,
   _version: DATA_VERSION,
 };
@@ -57,18 +58,27 @@ function calcBalance(data) {
   const orders = data.orders || [];
   const expenses = data.expenses || [];
   const debts = data.personalDebts || [];
+  const conversions = data.conversions || [];
   let balanceUSD = 0, balanceLBP = 0;
+
+  // المقبوض من الطلبات
   orders.forEach(o => {
     balanceUSD += o.collectedUSD || 0;
     balanceLBP += (o.collectedLBP || 0) * 1000;
   });
+
+  // التسديدات للشركات
   orders.filter(o => o.settled).forEach(o => { balanceUSD -= o.dueToCompany || 0; });
+
+  // المصروفات
   expenses.forEach(e => {
     if (e.affectsBalance !== false) {
       if (e.currency === "usd") balanceUSD -= e.amount || 0;
       else balanceLBP -= (e.amount || 0) * 1000;
     }
   });
+
+  // الديون
   debts.forEach(d => {
     if (d.affectsBalance !== false) {
       const paid = (d.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
@@ -82,6 +92,18 @@ function calcBalance(data) {
       }
     }
   });
+
+  // التحويلات
+  conversions.forEach(c => {
+    if (c.dir === "usd_to_lbp") {
+      balanceUSD -= c.amount || 0;
+      balanceLBP += (c.amount || 0) * (c.rate || 89000);
+    } else {
+      balanceLBP -= (c.amount || 0) * 1000;
+      balanceUSD += (c.amount || 0) * 1000 / (c.rate || 89000);
+    }
+  });
+
   return { balanceUSD, balanceLBP };
 }
 
@@ -99,6 +121,7 @@ function loadLocal() {
     if (!raw) return DEFAULT_DATA;
     const parsed = JSON.parse(raw);
     if (!parsed.users) parsed.users = DEFAULT_USERS;
+    if (!parsed.conversions) parsed.conversions = [];
     return { ...DEFAULT_DATA, ...parsed };
   } catch { return DEFAULT_DATA; }
 }
@@ -254,6 +277,7 @@ export default function DeliveryApp() {
       if (cloudData && cloudData._version === DATA_VERSION) {
         const merged = { ...DEFAULT_DATA, ...cloudData };
         if (!merged.users) merged.users = DEFAULT_USERS;
+        if (!merged.conversions) merged.conversions = [];
         setData(merged);
         saveLocal(merged);
       }
@@ -266,6 +290,7 @@ export default function DeliveryApp() {
       if (cloudData && cloudData._version === DATA_VERSION) {
         const merged = { ...DEFAULT_DATA, ...cloudData };
         if (!merged.users) merged.users = DEFAULT_USERS;
+        if (!merged.conversions) merged.conversions = [];
         setData(merged);
         saveLocal(merged);
       }
@@ -800,7 +825,7 @@ function OrderForm({ data, persist, showToast, editing, company, currentUser, on
   const save=()=>{
     const order={ id:e?e.id:uid(), currency, companyId:company?company.id:e?.companyId, companyName:company?company.name:e?.companyName, orderNumber:orderNumber.trim(), orderValue:ov, profit:pr, dueToCompany, collectedUSD:colUSD, collectedLBP:colLBP, tips, note:note.trim(), createdAt:e?e.createdAt:Date.now(), settled:e?e.settled:false, byName:currentUser?.displayName||"" };
     persist(prev=>({...prev,orders:e?prev.orders.map(o=>o.id===e.id?order:o):[...(prev.orders||[]),order]}));
-    showToast(e?"تم تعديل الطلب ✓":"تم حفظ الطلب ✓"); onBack();
+    showToast(e?"تم تعديل الطلب ✓":"تم حفظ الظلب ✓"); onBack();
   };
 
   return (
@@ -1184,12 +1209,8 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser,
 
   const confirmConvert=()=>{
     if(amt<=0) return;
-    persist(prev=>{
-      let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0;
-      if(convertDir==="usd_to_lbp"){ newUSD-=amt; newLBP+=amt*rate; }
-      else{ newLBP-=amt*1000; newUSD+=amt*1000/rate; }
-      return {...prev, balanceUSD:newUSD, balanceLBP:newLBP};
-    });
+    const conversion={ id:uid(), dir:convertDir, amount:amt, rate, createdAt:Date.now() };
+    persist(prev=>({...prev, conversions:[...(prev.conversions||[]), conversion]}));
     showToast("تم التحويل ✓"); setConvertAmount("");
   };
 
@@ -1301,7 +1322,7 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser,
         {currentUser?.role==="admin" && (
           <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.red}40`, borderRadius:16, padding:16, marginBottom:14 }}>
             <div style={{ fontWeight:800, fontSize:14, marginBottom:6, color:COLORS.red }}>⚠️ مسح كل البيانات</div>
-            <div style={{ fontSize:12, color:COLORS.textFaint, marginBottom:12 }}>سيمسح جميع الطلبات والشركات والمصروفات والديون.</div>
+            <div style={{ fontSize:12, color:COLORS.textFaint, marginBottom:12 }}>سيمسح جميع الطلبات والشركات والمصروفات والديون والتحويلات.</div>
             <button onClick={clearAllData} style={{ width:"100%", background:`${COLORS.red}20`, border:`1px solid ${COLORS.red}`, borderRadius:10, padding:"13px", color:COLORS.red, fontWeight:800, fontSize:14, cursor:"pointer" }}>
               🗑️ مسح كل البيانات
             </button>
@@ -1314,4 +1335,4 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser,
       </div>
     </div>
   );
-}
+  }
