@@ -1194,7 +1194,16 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser,
   const saveRate=()=>{ const r=parseFloat(rateInput); if(r>0){persist(prev=>({...prev,exchangeRate:r}));showToast("تم تحديث سعر الصرف ✓");} setEditingRate(false); };
   const amt=parseFloat(convertAmount)||0;
   const convertResult=convertDir==="usd_to_lbp"?amt*rate:amt*1000/rate;
-  const confirmConvert=()=>{ if(amt<=0) return; showToast("تم التحويل ✓"); setConvertAmount(""); };
+  const confirmConvert=()=>{
+    if(amt<=0) return;
+    persist(prev=>{
+      let newUSD=prev.balanceUSD||0, newLBP=prev.balanceLBP||0;
+      if(convertDir==="usd_to_lbp"){ newUSD-=amt; newLBP+=amt*rate; }
+      else{ newLBP-=amt*1000; newUSD+=amt*1000/rate; }
+      return {...prev, balanceUSD:newUSD, balanceLBP:newLBP};
+    });
+    showToast("تم التحويل ✓"); setConvertAmount("");
+  };
   const savePasswords=()=>{ persist(prev=>({...prev,users:editUsers})); showToast("تم حفظ كلمات المرور ✓"); setShowPassEditor(false); };
   const clearAllData=()=>{ const clean={...DEFAULT_DATA,users:data.users,exchangeRate:data.exchangeRate}; persist(()=>clean); showToast("تم مسح كل البيانات ✓"); };
 
