@@ -85,6 +85,15 @@ function calcBalance(data) {
   return { balanceUSD, balanceLBP };
 }
 
+// دالة مشتركة لحساب إحصائيات الطلبات
+function calcOrderStats(orders) {
+  const active = orders.filter(o => !o.settled);
+  const profitUSD = active.reduce((s,o) => s + (o.profit||0), 0);
+  const tipsUSD = active.reduce((s,o) => s + (o.tips||0), 0);
+  const dueUSD = active.reduce((s,o) => s + (o.dueToCompany||0), 0);
+  return { profitUSD, tipsUSD, dueUSD };
+}
+
 function loadLocal() {
   try {
     const raw = localStorage.getItem(LOCAL_KEY);
@@ -243,7 +252,6 @@ export default function DeliveryApp() {
 
   useEffect(() => {
     loadFromCloud().then(cloudData => {
-      // فقط نقبل البيانات إذا كانت بالإصدار الصحيح
       if (cloudData && cloudData._version === DATA_VERSION) {
         const merged = { ...DEFAULT_DATA, ...cloudData };
         if (!merged.users) merged.users = DEFAULT_USERS;
@@ -397,13 +405,13 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
   const orders = data.orders || [];
   const todayStr = new Date().toDateString();
   const todayOrders = orders.filter(o => new Date(o.createdAt).toDateString()===todayStr);
-// نستخدم نفس الطلبات الموجودة بالضبط بدون أي فلتر إضافي
-  const todayProfitUSD = todayOrders.filter(o=>o.currency==="usd"&&!o.settled).reduce((s,o)=>s+(o.profit||0),0) + todayOrders.filter(o=>o.currency==="lbp"&&!o.settled).reduce((s,o)=>s+(o.profit||0)*1000,0) / (data.exchangeRate||89000);
-  const todayProfitLBP = todayOrders.filter(o=>o.currency==="lbp"&&!o.settled).reduce((s,o)=>s+(o.profit||0)*1000,0);
-const todayTipsUSD = todayOrders.filter(o=>!o.settled).reduce((s,o)=>s+(o.tips||0),0);
-  const todayDueUSD = todayOrders.filter(o=>o.currency==="usd"&&!o.settled).reduce((s,o)=>s+(o.dueToCompany||0),0);
+
+  // استخدام نفس دالة الحساب المشتركة
+  const { profitUSD: todayProfitUSD, tipsUSD: todayTipsUSD, dueUSD: todayDueUSD } = calcOrderStats(todayOrders);
+
   const totalDueUSD = companies.reduce((s,c)=>s+getCompanyDue(data,c.id).dueUSD,0);
   const totalExpUSD = (data.expenses||[]).filter(e=>e.currency==="usd"&&e.affectsBalance!==false).reduce((s,e)=>s+(e.amount||0),0);
+
   const today = new Date();
   const dayNames = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
   const monthNames = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
@@ -455,10 +463,10 @@ const todayTipsUSD = todayOrders.filter(o=>!o.settled).reduce((s,o)=>s+(o.tips||
 
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8 }}>
             {[
-              {icon:"💰",label:"أرباح",value:`$${fmt(todayProfitUSD,0)}`,color:COLORS.green},
-              {icon:"🎁",label:"تيبس",value:`$${fmt(todayTipsUSD,0)}`,color:COLORS.purple},
-              {icon:"🏢",label:"مترتب",value:`$${fmt(totalDueUSD,0)}`,color:COLORS.orange},
-              {icon:"💸",label:"مصروف",value:`$${fmt(totalExpUSD,0)}`,color:COLORS.red},
+              {icon:"💰",label:"أرباح",value:`$${fmt(todayProfitUSD)}`,color:COLORS.green},
+              {icon:"🎁",label:"تيبس",value:`$${fmt(todayTipsUSD)}`,color:COLORS.purple},
+              {icon:"🏢",label:"مترتب",value:`$${fmt(todayDueUSD)}`,color:COLORS.orange},
+              {icon:"💸",label:"مصروف",value:`$${fmt(totalExpUSD)}`,color:COLORS.red},
             ].map((s,i)=>(
               <div key={i} style={{ background:"rgba(0,0,0,0.25)", borderRadius:14, padding:"10px 6px", textAlign:"center", border:`1px solid ${COLORS.border}` }}>
                 <div style={{ fontSize:16, marginBottom:3 }}>{s.icon}</div>
@@ -669,8 +677,7 @@ function CompanyScreen({ data, persist, showToast, company, currentUser, onBack,
   const [showSettle, setShowSettle] = useState(false);
   const { dueUSD, dueLBP } = getCompanyDue(data, company.id);
   const companyOrders = (data.orders||[]).filter(o=>o.companyId===company.id).sort((a,b)=>b.createdAt-a.createdAt);
-  const totalProfitUSD = companyOrders.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.profit||0),0);
-  const totalTipsUSD = companyOrders.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.tips||0),0);
+  const { profitUSD: totalProfitUSD, tipsUSD: totalTipsUSD } = calcOrderStats(companyOrders);
 
   const deleteCompany = () => {
     persist(prev=>({...prev,companies:(prev.companies||[]).filter(c=>c.id!==company.id),orders:(prev.orders||[]).filter(o=>o.companyId!==company.id)}));
@@ -856,9 +863,9 @@ function OrdersScreen({ data, rate }) {
     if(filter==="month") return orders.filter(o=>o.createdAt>=month.getTime());
     return orders;
   },[orders,filter]);
-  const totalProfitUSD=filtered.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.profit||0),0);
-  const totalDueUSD=filtered.filter(o=>o.currency==="usd"&&!o.settled).reduce((s,o)=>s+(o.dueToCompany||0),0);
-  const totalTipsUSD=filtered.filter(o=>o.currency==="usd").reduce((s,o)=>s+(o.tips||0),0);
+
+  const { profitUSD, tipsUSD, dueUSD } = calcOrderStats(filtered);
+
   return (
     <div>
       <TopBar title="كل الطلبات" />
@@ -870,7 +877,7 @@ function OrdersScreen({ data, rate }) {
         </div>
         <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:14, marginBottom:16 }}>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
-            {[{label:"الأرباح",value:`$${fmt(totalProfitUSD)}`,color:COLORS.green},{label:"مترتب",value:`$${fmt(totalDueUSD)}`,color:COLORS.orange},{label:"التيبس",value:`$${fmt(totalTipsUSD)}`,color:COLORS.purple}].map((s,i)=>(
+            {[{label:"الأرباح",value:`$${fmt(profitUSD)}`,color:COLORS.green},{label:"مترتب",value:`$${fmt(dueUSD)}`,color:COLORS.orange},{label:"التيبس",value:`$${fmt(tipsUSD)}`,color:COLORS.purple}].map((s,i)=>(
               <div key={i} style={{ textAlign:"center", background:COLORS.bgCard2, borderRadius:10, padding:10 }}>
                 <div style={{ fontSize:10, color:COLORS.textDim, marginBottom:4 }}>{s.label}</div>
                 <div style={{ fontSize:15, fontWeight:800, color:s.color }}>{s.value}</div>
@@ -1309,4 +1316,4 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser,
       </div>
     </div>
   );
-      }
+}
