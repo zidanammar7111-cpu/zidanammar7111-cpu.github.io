@@ -60,25 +60,17 @@ function calcBalance(data) {
   const debts = data.personalDebts || [];
   const conversions = data.conversions || [];
   let balanceUSD = 0, balanceLBP = 0;
-
-  // المقبوض من الطلبات
   orders.forEach(o => {
     balanceUSD += o.collectedUSD || 0;
     balanceLBP += (o.collectedLBP || 0) * 1000;
   });
-
-  // التسديدات للشركات
   orders.filter(o => o.settled).forEach(o => { balanceUSD -= o.dueToCompany || 0; });
-
-  // المصروفات
   expenses.forEach(e => {
     if (e.affectsBalance !== false) {
       if (e.currency === "usd") balanceUSD -= e.amount || 0;
       else balanceLBP -= (e.amount || 0) * 1000;
     }
   });
-
-  // الديون
   debts.forEach(d => {
     if (d.affectsBalance !== false) {
       const paid = (d.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
@@ -92,8 +84,6 @@ function calcBalance(data) {
       }
     }
   });
-
-  // التحويلات
   conversions.forEach(c => {
     if (c.dir === "usd_to_lbp") {
       balanceUSD -= c.amount || 0;
@@ -103,16 +93,16 @@ function calcBalance(data) {
       balanceUSD += (c.amount || 0) * 1000 / (c.rate || 89000);
     }
   });
-
   return { balanceUSD, balanceLBP };
 }
 
 function calcOrderStats(orders) {
   const active = orders.filter(o => !o.settled);
-  const profitUSD = active.reduce((s,o) => s + (o.profit||0), 0);
-  const tipsUSD = active.reduce((s,o) => s + (o.tips||0), 0);
-  const dueUSD = active.reduce((s,o) => s + (o.dueToCompany||0), 0);
-  return { profitUSD, tipsUSD, dueUSD };
+  return {
+    profitUSD: active.reduce((s,o) => s + (o.profit||0), 0),
+    tipsUSD: active.reduce((s,o) => s + (o.tips||0), 0),
+    dueUSD: active.reduce((s,o) => s + (o.dueToCompany||0), 0),
+  };
 }
 
 function loadLocal() {
@@ -430,7 +420,11 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
   const todayStr = new Date().toDateString();
   const todayOrders = orders.filter(o => new Date(o.createdAt).toDateString()===todayStr);
   const { profitUSD: todayProfitUSD, tipsUSD: todayTipsUSD, dueUSD: todayDueUSD } = calcOrderStats(todayOrders);
-  const totalExpUSD = (data.expenses||[]).filter(e=>e.currency==="usd"&&e.affectsBalance!==false).reduce((s,e)=>s+(e.amount||0),0);
+
+  // مصروف اليوم دولار وليرة
+  const todayExpenses = (data.expenses||[]).filter(e=>new Date(e.createdAt).toDateString()===todayStr && e.affectsBalance!==false);
+  const todayExpUSD = todayExpenses.filter(e=>e.currency==="usd").reduce((s,e)=>s+(e.amount||0),0);
+  const todayExpLBP = todayExpenses.filter(e=>e.currency==="lbp").reduce((s,e)=>s+(e.amount||0)*1000,0);
 
   const today = new Date();
   const dayNames = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
@@ -481,17 +475,26 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
             </div>
           </div>
 
+          {/* إحصائيات اليوم - 4 مربعات */}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8 }}>
             {[
               {icon:"💰",label:"أرباح",value:`$${fmt(todayProfitUSD)}`,color:COLORS.green},
               {icon:"🎁",label:"تيبس",value:`$${fmt(todayTipsUSD)}`,color:COLORS.purple},
               {icon:"🏢",label:"مترتب",value:`$${fmt(todayDueUSD)}`,color:COLORS.orange},
-              {icon:"💸",label:"مصروف",value:`$${fmt(totalExpUSD)}`,color:COLORS.red},
+              {icon:"💸",label:"مصروف",value:null,color:COLORS.red,isExpense:true,expUSD:todayExpUSD,expLBP:todayExpLBP},
             ].map((s,i)=>(
               <div key={i} style={{ background:"rgba(0,0,0,0.25)", borderRadius:14, padding:"10px 6px", textAlign:"center", border:`1px solid ${COLORS.border}` }}>
                 <div style={{ fontSize:16, marginBottom:3 }}>{s.icon}</div>
                 <div style={{ fontSize:9, color:COLORS.textDim, marginBottom:2 }}>{s.label}</div>
-                <div style={{ fontSize:12, fontWeight:800, color:s.color }}>{s.value}</div>
+                {s.isExpense ? (
+                  <div>
+                    {s.expUSD>0 && <div style={{ fontSize:11, fontWeight:800, color:s.color }}>-${fmt(s.expUSD)}</div>}
+                    {s.expLBP>0 && <div style={{ fontSize:10, fontWeight:700, color:COLORS.blue }}>-{fmtLBP(s.expLBP)}</div>}
+                    {s.expUSD===0&&s.expLBP===0 && <div style={{ fontSize:12, fontWeight:800, color:s.color }}>$0</div>}
+                  </div>
+                ) : (
+                  <div style={{ fontSize:12, fontWeight:800, color:s.color }}>{s.value}</div>
+                )}
               </div>
             ))}
           </div>
@@ -825,7 +828,7 @@ function OrderForm({ data, persist, showToast, editing, company, currentUser, on
   const save=()=>{
     const order={ id:e?e.id:uid(), currency, companyId:company?company.id:e?.companyId, companyName:company?company.name:e?.companyName, orderNumber:orderNumber.trim(), orderValue:ov, profit:pr, dueToCompany, collectedUSD:colUSD, collectedLBP:colLBP, tips, note:note.trim(), createdAt:e?e.createdAt:Date.now(), settled:e?e.settled:false, byName:currentUser?.displayName||"" };
     persist(prev=>({...prev,orders:e?prev.orders.map(o=>o.id===e.id?order:o):[...(prev.orders||[]),order]}));
-    showToast(e?"تم تعديل الطلب ✓":"تم حفظ الظلب ✓"); onBack();
+    showToast(e?"تم تعديل الطلب ✓":"تم حفظ الطلب ✓"); onBack();
   };
 
   return (
@@ -927,7 +930,7 @@ function ExpensesScreen({ data, persist, showToast, goTo, rate, onEdit }) {
   const totalUSD=filtered.filter(e=>e.currency==="usd").reduce((s,e)=>s+(e.amount||0),0);
   const totalLBP=filtered.filter(e=>e.currency==="lbp").reduce((s,e)=>s+(e.amount||0)*1000,0);
   const deleteExpense=(id)=>{
-    persist(prev=>({...prev,expenses:prev.expenses.filter(e=>e.id!==id)}));
+    persist(prev=>({...prev,expenses:(prev.expenses||[]).filter(e=>e.id!==id)}));
     showToast("تم حذف المصروف");
   };
   return (
@@ -942,8 +945,9 @@ function ExpensesScreen({ data, persist, showToast, goTo, rate, onEdit }) {
         <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:16, padding:16, marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <div>
             <div style={{ fontSize:12, color:COLORS.textDim, marginBottom:4 }}>إجمالي المصروفات</div>
-            <div style={{ fontSize:22, fontWeight:800, color:COLORS.red }}>${fmt(totalUSD)}</div>
-            {totalLBP>0&&<div style={{ fontSize:13, color:COLORS.blue, marginTop:2 }}>{fmtLBP(totalLBP)} ل.ل</div>}
+            {totalUSD>0&&<div style={{ fontSize:20, fontWeight:800, color:COLORS.red }}>${fmt(totalUSD)}</div>}
+            {totalLBP>0&&<div style={{ fontSize:16, fontWeight:800, color:COLORS.red, marginTop:2 }}>{fmtLBP(totalLBP)} ل.ل</div>}
+            {totalUSD===0&&totalLBP===0&&<div style={{ fontSize:20, fontWeight:800, color:COLORS.red }}>$0</div>}
           </div>
           <div style={{ fontSize:36 }}>💸</div>
         </div>
@@ -1004,9 +1008,25 @@ function ExpenseForm({ data, persist, showToast, editing, currentUser, onBack, r
   const amt=parseFloat(amount)||0;
 
   const save=()=>{
-    const expense={id:e?e.id:uid(),currency,amount:amt,category:category.trim(),note:note.trim(),createdAt:e?e.createdAt:Date.now(),byName:currentUser?.displayName||"",affectsBalance};
-    persist(prev=>({...prev,expenses:e?prev.expenses.map(ex=>ex.id===e.id?expense:ex):[...(prev.expenses||[]),expense]}));
-    showToast(e?"تم تعديل المصروف ✓":"تم حفظ المصروف ✓"); onBack();
+    const expense={
+      id: e?e.id:uid(),
+      currency,
+      amount: amt,
+      category: category.trim(),
+      note: note.trim(),
+      createdAt: e?e.createdAt:Date.now(),
+      byName: currentUser?.displayName||"",
+      affectsBalance
+    };
+    // نضيف المصروف للقائمة فقط — calcBalance يحسب الرصيد تلقائياً
+    persist(prev => ({
+      ...prev,
+      expenses: e
+        ? (prev.expenses||[]).map(ex => ex.id===e.id ? expense : ex)
+        : [...(prev.expenses||[]), expense]
+    }));
+    showToast(e?"تم تعديل المصروف ✓":"تم حفظ المصروف ✓");
+    onBack();
   };
 
   return (
@@ -1335,4 +1355,4 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser,
       </div>
     </div>
   );
-  }
+    }
