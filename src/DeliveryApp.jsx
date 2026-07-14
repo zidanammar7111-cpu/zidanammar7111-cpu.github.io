@@ -85,7 +85,6 @@ function calcBalance(data) {
   return { balanceUSD, balanceLBP };
 }
 
-// دالة مشتركة لحساب إحصائيات الطلبات
 function calcOrderStats(orders) {
   const active = orders.filter(o => !o.settled);
   const profitUSD = active.reduce((s,o) => s + (o.profit||0), 0);
@@ -405,11 +404,7 @@ function HomeScreen({ data, persist, showToast, goTo, rate, onSelectCompany, cur
   const orders = data.orders || [];
   const todayStr = new Date().toDateString();
   const todayOrders = orders.filter(o => new Date(o.createdAt).toDateString()===todayStr);
-
-  // استخدام نفس دالة الحساب المشتركة
   const { profitUSD: todayProfitUSD, tipsUSD: todayTipsUSD, dueUSD: todayDueUSD } = calcOrderStats(todayOrders);
-
-  const totalDueUSD = companies.reduce((s,c)=>s+getCompanyDue(data,c.id).dueUSD,0);
   const totalExpUSD = (data.expenses||[]).filter(e=>e.currency==="usd"&&e.affectsBalance!==false).reduce((s,e)=>s+(e.amount||0),0);
 
   const today = new Date();
@@ -863,9 +858,7 @@ function OrdersScreen({ data, rate }) {
     if(filter==="month") return orders.filter(o=>o.createdAt>=month.getTime());
     return orders;
   },[orders,filter]);
-
   const { profitUSD, tipsUSD, dueUSD } = calcOrderStats(filtered);
-
   return (
     <div>
       <TopBar title="كل الطلبات" />
@@ -942,7 +935,6 @@ function ExpenseCard({ expense, onDelete, onEdit, rate }) {
   const [open,setOpen]=useState(false);
   const isUSD=expense.currency==="usd";
   const dt=new Date(expense.createdAt);
-  const displayUSD = isUSD ? expense.amount : (expense.amount*1000/rate);
   return (
     <div style={{ background:COLORS.bgCard, border:`1px solid ${COLORS.border}`, borderRadius:14, overflow:"hidden" }}>
       <div onClick={()=>setOpen(o=>!o)} style={{ padding:"12px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }}>
@@ -954,15 +946,16 @@ function ExpenseCard({ expense, onDelete, onEdit, rate }) {
           </div>
         </div>
         <div style={{ textAlign:"left" }}>
-          <div style={{ fontWeight:800, color:COLORS.red, fontSize:14 }}>-${fmt(displayUSD)}</div>
-          {!isUSD && <div style={{ fontSize:10, color:COLORS.textFaint }}>{fmtLBP(expense.amount*1000)} ل.ل</div>}
+          {isUSD
+            ? <div style={{ fontWeight:800, color:COLORS.red, fontSize:14 }}>-${fmt(expense.amount)}</div>
+            : <div style={{ fontWeight:800, color:COLORS.red, fontSize:14 }}>-{fmtLBP(expense.amount*1000)} ل.ل</div>
+          }
         </div>
       </div>
       {open&&(
         <div style={{ borderTop:`1px solid ${COLORS.border}`, padding:"12px 14px", display:"flex", flexDirection:"column", gap:6 }}>
           <Row label="النوع" value={expense.category||""} />
-          <Row label="المبلغ الأصلي" value={isUSD?`$${fmt(expense.amount)}`:`${fmt(expense.amount)} ألف ل.ل`} valueColor={COLORS.red} />
-          {!isUSD && <Row label="بالدولار" value={`≈ $${fmt(displayUSD)}`} valueColor={COLORS.textDim} />}
+          <Row label="المبلغ" value={isUSD?`$${fmt(expense.amount)}`:`${fmtLBP(expense.amount*1000)} ل.ل`} valueColor={COLORS.red} />
           {expense.note&&<Row label="ملاحظات" value={expense.note} />}
           <div style={{ display:"flex", gap:10, marginTop:6 }}>
             <button onClick={onEdit} style={{ background:"none", border:"none", color:COLORS.blue, fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}><Edit3 size={14}/> تعديل</button>
@@ -984,7 +977,6 @@ function ExpenseForm({ data, persist, showToast, editing, currentUser, onBack, r
   const categories=["بنزين","أكل","صيانة","إنترنت","كهرباء","إيجار","أخرى"];
   const valid=parseFloat(amount)>0;
   const amt=parseFloat(amount)||0;
-  const amtUSD=currency==="usd"?amt:amt*1000/rate;
 
   const save=()=>{
     const expense={id:e?e.id:uid(),currency,amount:amt,category:category.trim(),note:note.trim(),createdAt:e?e.createdAt:Date.now(),byName:currentUser?.displayName||"",affectsBalance};
@@ -998,11 +990,6 @@ function ExpenseForm({ data, persist, showToast, editing, currentUser, onBack, r
       <div style={{ padding:"0 16px" }}>
         <Field label="العملة"><CurrencyToggle value={currency} onChange={setCurrency} /></Field>
         <Field label={currency==="usd"?"المبلغ ($)":"المبلغ (ألف ل.ل)"}><AmountInput currency={currency} value={amount} onChange={setAmount} /></Field>
-        {currency==="lbp" && amt>0 && (
-          <div style={{ background:COLORS.bgCard2, borderRadius:10, padding:"8px 12px", marginBottom:14, fontSize:12, color:COLORS.textDim }}>
-            يُعرض بالدولار: ≈ <span style={{ color:COLORS.red, fontWeight:700 }}>${fmt(amtUSD)}</span>
-          </div>
-        )}
         <Field label="النوع / الفئة">
           <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:8 }}>
             {categories.map(c=><button key={c} onClick={()=>setCategory(c)} style={{ padding:"8px 14px", borderRadius:20, border:`1px solid ${category===c?COLORS.red:COLORS.border}`, background:category===c?`${COLORS.red}20`:"transparent", color:category===c?COLORS.red:COLORS.textDim, fontWeight:600, fontSize:13, cursor:"pointer" }}>{c}</button>)}
@@ -1194,6 +1181,7 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser,
   const saveRate=()=>{ const r=parseFloat(rateInput); if(r>0){persist(prev=>({...prev,exchangeRate:r}));showToast("تم تحديث سعر الصرف ✓");} setEditingRate(false); };
   const amt=parseFloat(convertAmount)||0;
   const convertResult=convertDir==="usd_to_lbp"?amt*rate:amt*1000/rate;
+
   const confirmConvert=()=>{
     if(amt<=0) return;
     persist(prev=>{
@@ -1204,6 +1192,7 @@ function SettingsScreen({ data, persist, showToast, onLogout, rate, currentUser,
     });
     showToast("تم التحويل ✓"); setConvertAmount("");
   };
+
   const savePasswords=()=>{ persist(prev=>({...prev,users:editUsers})); showToast("تم حفظ كلمات المرور ✓"); setShowPassEditor(false); };
   const clearAllData=()=>{ const clean={...DEFAULT_DATA,users:data.users,exchangeRate:data.exchangeRate}; persist(()=>clean); showToast("تم مسح كل البيانات ✓"); };
 
